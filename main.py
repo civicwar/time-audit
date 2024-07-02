@@ -67,12 +67,7 @@ for user, group in data_grouped:
                 }
             )
 
-        rounded_duration = round(group_sorted.iloc[i]["Duration (decimal)"], 3)
-
-        time_stats["total_time"] += rounded_duration
-        time_stats["time_per_user"][user] += rounded_duration
-
-        if rounded_duration < 0.01:
+        if group_sorted.iloc[i]["Duration (decimal)"] < 0.01:
             small_tasks_per_user[user].append(
                 {
                     "task": group_sorted.iloc[i]["Description"],
@@ -83,6 +78,12 @@ for user, group in data_grouped:
                 }
             )
 
+time_stats["total_time"] = data_new["Duration (decimal)"].sum()
+time_stats["time_per_user"] = (
+    data_new.groupby("User")
+    .agg({"Duration (decimal)": "sum"})
+    .to_dict()["Duration (decimal)"]
+)
 
 print("Overlap per user")
 print(json.dumps(overlap_per_user, indent=4))

@@ -1,2 +1,4 @@
 report.csv
 output/
+.old
+.venv/
