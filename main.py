@@ -4,6 +4,7 @@ import json
 
 # Load the CSV data from the new file
 file_path_new = "report.csv"
+big_task_duration = 8.00
 
 if not os.path.exists(file_path_new):
     print("The report.csv file is needed.")
@@ -33,10 +34,12 @@ data_grouped = data_new.groupby("User")
 overlap_per_user = {}
 time_stats = {"total_time": 0, "time_per_user": {}}
 small_tasks_per_user = {}
+big_tasks_per_user = {}
 
 for user, group in data_grouped:
     overlap_per_user[user] = []
     small_tasks_per_user[user] = []
+    big_tasks_per_user[user] = []
     time_stats["time_per_user"][user] = 0
 
     group_sorted = group.sort_values("Start Datetime")
@@ -77,6 +80,17 @@ for user, group in data_grouped:
                     "duration": group_sorted.iloc[i]["Duration (decimal)"],
                 }
             )
+        if group_sorted.iloc[i]["Duration (decimal)"] > big_task_duration:
+            big_tasks_per_user[user].append(
+                {
+                    "task": group_sorted.iloc[i]["Description"],
+                    "datetime": group_sorted.iloc[i]["Start Datetime"].strftime(
+                        "%Y-%m-%d %H:%M:%S"
+                    ),
+                    "duration": group_sorted.iloc[i]["Duration (decimal)"],
+                }
+            )
+
 
 time_stats["total_time"] = data_new["Duration (decimal)"].sum()
 time_stats["time_per_user"] = (
@@ -94,6 +108,8 @@ print(json.dumps(time_stats, indent=4))
 print("Very Small tasks per user (duration < 0.01)")
 print(json.dumps(small_tasks_per_user, indent=4))
 
+print(f"Very big tasks per user (duration > {big_task_duration} hours)")
+print(json.dumps(big_tasks_per_user, indent=4))
 
 grouping_by_user_by_date = (
     data_new.groupby(["User", "Start Date", "Description"])
