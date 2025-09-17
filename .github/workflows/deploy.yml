@@ -1,0 +1,67 @@
+name: Deploy
+
+on:
+  push:
+    branches:
+      - release
+
+jobs:
+  build-and-deploy:
+    runs-on: ubuntu-latest
+    env:
+      PYTHON_VERSION: '3.10'
+      DEPLOY_HOST: ${{ secrets.DEPLOY_HOST }}
+      DEPLOY_USER: ${{ secrets.DEPLOY_USER }}
+      DEPLOY_PATH: /opt/time-audit
+      SSH_PRIVATE_KEY: ${{ secrets.DEPLOY_SSH_KEY }}
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: ${{ env.PYTHON_VERSION }}
+
+      - name: Install Python deps (runtime subset)
+        run: |
+          python -m venv venv
+          . venv/bin/activate
+          pip install --upgrade pip
+          pip install fastapi uvicorn[standard] pandas python-multipart
+
+      - name: Build frontend
+        uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+        # build
+      - name: Install & build frontend
+        run: |
+          cd frontend
+          npm ci
+          npm run build
+
+      - name: Archive artifacts
+        run: |
+          tar czf artifact.tar.gz backend time_audit frontend/dist output || true
+
+      - name: Add SSH key
+        run: |
+          install -m 600 -D /dev/null ~/.ssh/id_rsa
+          echo "$SSH_PRIVATE_KEY" > ~/.ssh/id_rsa
+          ssh-keyscan -H "$DEPLOY_HOST" >> ~/.ssh/known_hosts
+
+      - name: Upload code via rsync
+        run: |
+          rsync -az --delete \
+            --exclude '.git' \
+            --exclude 'venv' \
+            ./ ${DEPLOY_USER}@${DEPLOY_HOST}:${DEPLOY_PATH}/
+
+      - name: Install backend dependencies on server
+        run: |
+          ssh ${DEPLOY_USER}@${DEPLOY_HOST} 'cd ${DEPLOY_PATH} && /opt/time-audit/venv/bin/pip install --upgrade pip && /opt/time-audit/venv/bin/pip install fastapi uvicorn[standard] pandas python-multipart'
+
+      - name: Restart service
+        run: |
+          ssh ${DEPLOY_USER}@${DEPLOY_HOST} 'sudo systemctl restart time-audit.service && sudo systemctl status --no-pager time-audit.service'

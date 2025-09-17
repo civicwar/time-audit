@@ -2,6 +2,8 @@ from fastapi import FastAPI, UploadFile, File, HTTPException
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.staticfiles import StaticFiles
 from time_audit import generate_time_audit
+from fastapi.responses import FileResponse
+from starlette.responses import Response
 
 import os
 
@@ -23,10 +25,25 @@ if not os.path.exists(OUTPUT_DIR):
     os.makedirs(OUTPUT_DIR, exist_ok=True)
 app.mount("/reports", StaticFiles(directory=OUTPUT_DIR), name="reports")
 
+# Frontend SPA mount (serve built Vue app if present)
+FRONTEND_DIST = os.path.join(os.path.dirname(__file__), "..", "frontend", "dist")
+FRONTEND_DIST = os.path.abspath(FRONTEND_DIST)
+if os.path.isdir(FRONTEND_DIST):
+    app.mount(
+        "/", StaticFiles(directory=FRONTEND_DIST, html=True), name="frontend"
+    )
+
+    @app.get("/{full_path:path}")
+    async def spa_fallback(full_path: str):  # pragma: no cover
+        index_path = os.path.join(FRONTEND_DIST, "index.html")
+        if os.path.exists(index_path):
+            return FileResponse(index_path)
+        return Response(status_code=404)
+
 
 @app.post("/api/audit")
 async def audit_csv(file: UploadFile = File(...), big_task_hours: float = 8.0):
-    if not file.filename.endswith('.csv'):
+    if not file.filename or not file.filename.lower().endswith('.csv'):
         raise HTTPException(status_code=400, detail="File must be a CSV")
     content = await file.read()
     try:
