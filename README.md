@@ -44,3 +44,22 @@ generate_time_audit(csv_content: str, big_task_hours: float = 8.0, output_dir: s
 ```
 
 This allows easy integration into a web endpoint that accepts an uploaded CSV and returns JSON.
+
+### Web App (Backend + Frontend)
+
+Backend (FastAPI):
+
+```bash
+poetry install
+poetry run uvicorn backend.main:app --reload
+```
+
+Frontend (Vue3 + Vuetify via Vite):
+
+```bash
+cd frontend
+npm install
+npm run dev
+```
+
+The frontend dev server proxies API calls to `http://localhost:8000` and report JSON files are available at `/reports/<user>_report.json`.
