@@ -62,17 +62,17 @@
       </v-expansion-panels>
 
       <v-divider class="my-4" />
-      <h3 class="text-h6 mb-2">Download Per-User JSON Reports</h3>
-      <v-chip-group column>
+      <h3 class="text-h6 mb-2">Download Per-User JSON Reports (this run)</h3>
+      <v-chip-group column v-if="results.report_files && results.report_files.length">
         <v-chip
-          v-for="user in Object.keys(results.report_by_user_by_date)"
-          :key="user"
-          :href="reportLink(user)"
+          v-for="rf in results.report_files"
+          :key="rf.relative_path"
+          :href="`/reports/${rf.relative_path}`"
           target="_blank"
           label
           variant="outlined"
           color="primary"
-        >{{ user }}</v-chip>
+        >{{ rf.user }}</v-chip>
       </v-chip-group>
     </div>
   </v-card>
@@ -111,8 +111,5 @@ const submit = async () => {
   }
 }
 
-const reportLink = (user) => {
-  const filename = `${user.replace(/ /g, '_').toLowerCase()}_report.json`
-  return `/reports/${filename}`
-}
+// Deprecated: dynamic reportLink replaced by server-provided filenames with timestamps
 </script>

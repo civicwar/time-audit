@@ -1,8 +1,11 @@
 import os
 import json
+import shutil
+from datetime import datetime, timezone, timedelta
 import pandas as pd
 from io import StringIO
-from typing import Optional, Dict, Any
+from typing import Optional, Dict, Any, List
+import uuid
 
 
 def convert_decimal_to_hm(decimal_hours: float) -> str:
@@ -16,6 +19,8 @@ def generate_time_audit(
     big_task_hours: float = 8.0,
     output_dir: Optional[str] = None,
     write_reports: bool = True,
+    clean_output_dir: bool = False,  # deprecated: retained for compatibility, ignored in favor of per-request subdirs
+    retention_hours: int = 24,
 ) -> Dict[str, Any]:
     """Generate time audit statistics and (optionally) write per-user JSON reports.
 
@@ -25,6 +30,8 @@ def generate_time_audit(
     big_task_hours: Threshold above which a task is considered very big.
     output_dir: Directory to write per-user JSON reports. Used only if write_reports is True.
     write_reports: Whether to write JSON report files. If False, function only returns structures.
+    clean_output_dir: (Deprecated) Ignored; previous behavior replaced with per-request subdirectories for isolation.
+    retention_hours: Number of hours to retain past run directories. Directories older than this will be deleted.
 
     Returns
     -------
@@ -34,7 +41,9 @@ def generate_time_audit(
         small_tasks_per_user (duration < 0.01)
         big_tasks_per_user (duration > big_task_hours)
         report_by_user_by_date (nested dict user -> date -> list[task dict])
-        big_task_hours (echo of threshold)
+    big_task_hours (echo of threshold)
+    report_files (list of {user, filename, relative_path}) if write_reports is True else empty list
+    run_dir (name of the per-request subdirectory) when write_reports True else None
     """
     # Read CSV from string
     data_new = pd.read_csv(StringIO(csv_content))
@@ -143,18 +152,47 @@ def generate_time_audit(
             }
         )
 
+    report_files: List[Dict[str, str]] = []
+    run_dir_name: Optional[str] = None
     if write_reports:
         if output_dir is None:
             output_dir = "output"
-        if not os.path.exists(output_dir):
-            os.makedirs(output_dir)
+        # Ensure base directory exists
+        os.makedirs(output_dir, exist_ok=True)
+
+        # Retention: delete run directories older than retention_hours
+        now = datetime.now(timezone.utc)
+        for entry in os.scandir(output_dir):
+            if entry.is_dir():
+                name = entry.name
+                ts_part = name.split("_")[0]
+                try:
+                    ts_dt = datetime.strptime(ts_part, "%Y%m%dT%H%M%SZ").replace(tzinfo=timezone.utc)
+                except ValueError:
+                    continue
+                if now - ts_dt > timedelta(hours=retention_hours):
+                    try:
+                        shutil.rmtree(entry.path)
+                    except OSError:
+                        pass
+
+        # Create per-request subdirectory
+        ts = now.strftime("%Y%m%dT%H%M%SZ")
+        run_dir_name = f"{ts}_{uuid.uuid4().hex[:6]}"
+        run_dir_path = os.path.join(output_dir, run_dir_name)
+        os.makedirs(run_dir_path, exist_ok=True)
 
         for user, data in report_by_user_by_date.items():
-            json_file_path = os.path.join(
-                output_dir, f"{user.replace(' ', '_').lower()}_report.json"
-            )
+            safe_user = user.replace(" ", "_").lower()
+            filename = f"{safe_user}_report.json"
+            json_file_path = os.path.join(run_dir_path, filename)
             with open(json_file_path, "w") as f:
                 json.dump(data, f, indent=4)
+            report_files.append({
+                "user": user,
+                "filename": filename,
+                "relative_path": f"{run_dir_name}/{filename}",
+            })
 
     return {
         "overlap_per_user": overlap_per_user,
@@ -163,4 +201,6 @@ def generate_time_audit(
         "big_tasks_per_user": big_tasks_per_user,
         "report_by_user_by_date": report_by_user_by_date,
         "big_task_hours": big_task_hours,
+        "report_files": report_files,
+        "run_dir": run_dir_name,
     }

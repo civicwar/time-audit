@@ -36,6 +36,7 @@ async def audit_csv(file: UploadFile = File(...), big_task_hours: float = 8.0):
             big_task_hours=big_task_hours,
             output_dir=OUTPUT_DIR,
             write_reports=True,
+            retention_hours=24,
         )
     except Exception as e:
         raise HTTPException(status_code=400, detail=f"Processing error: {e}")
