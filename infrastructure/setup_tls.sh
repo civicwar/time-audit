@@ -18,7 +18,7 @@ DEBIAN_FRONTEND=noninteractive apt-get install -y nginx python3-certbot-nginx
 
 # Adjust backend to bind localhost if not already
 SERVICE_UNIT="/etc/systemd/system/${SERVICE_NAME}"
-if grep -q "--host 0.0.0.0" "$SERVICE_UNIT"; then
+if grep -q -- "--host 0.0.0.0" "$SERVICE_UNIT"; then
   echo "[2] Updating service host binding to 127.0.0.1" 
   sed -i "s/--host 0.0.0.0/--host 127.0.0.1/" "$SERVICE_UNIT"
   systemctl daemon-reload
@@ -28,7 +28,7 @@ fi
 # Create Nginx site if missing
 if [[ ! -f "$SITE_FILE" ]]; then
   echo "[3] Creating nginx site config" 
-  cat > "$SITE_FILE" <<EOF
+  cat > "$SITE_FILE" <<'EOF'
 server {
     listen 80;
     server_name ${DOMAIN};
