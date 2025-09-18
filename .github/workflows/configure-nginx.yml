@@ -1,0 +1,54 @@
+name: Configure Nginx TLS
+
+on:
+  workflow_dispatch:
+    inputs:
+      domain:
+        description: "Domain"
+        required: true
+        default: "time-audit.just4u.app"
+      email:
+        description: "Let's Encrypt email"
+        required: true
+        default: "admin@just4u.app"
+      mode:
+        description: "Mode (proxy=SPA served by FastAPI, static=serve built dist via Nginx)"
+        required: true
+        default: "proxy"
+        type: choice
+        options:
+          - proxy
+          - static
+
+jobs:
+  configure:
+    runs-on: ubuntu-latest
+    env:
+      DEPLOY_HOST: ${{ secrets.DEPLOY_HOST }}
+      DEPLOY_USER: ${{ secrets.DEPLOY_USER }}
+      SSH_PRIVATE_KEY: ${{ secrets.DEPLOY_SSH_KEY }}
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Prepare SSH
+        run: |
+          install -m 600 -D /dev/null ~/.ssh/id_rsa
+          echo "$SSH_PRIVATE_KEY" > ~/.ssh/id_rsa
+          ssh-keyscan -H "$DEPLOY_HOST" >> ~/.ssh/known_hosts
+
+      - name: Upload script
+        run: |
+          rsync -az infrastructure/configure_nginx.sh ${DEPLOY_USER}@${DEPLOY_HOST}:/tmp/configure_nginx.sh
+          ssh ${DEPLOY_USER}@${DEPLOY_HOST} 'sudo mv /tmp/configure_nginx.sh /usr/local/bin/configure_nginx.sh && sudo chmod +x /usr/local/bin/configure_nginx.sh'
+
+      - name: Run configuration
+        run: |
+          ssh ${DEPLOY_USER}@${DEPLOY_HOST} "sudo DOMAIN='${{ github.event.inputs.domain }}' EMAIL='${{ github.event.inputs.email }}' MODE='${{ github.event.inputs.mode }}' /usr/local/bin/configure_nginx.sh"
+
+      - name: HTTPS health check
+        run: |
+          for i in {1..12}; do
+            if curl -fsS https://${{ github.event.inputs.domain }}/api/health >/dev/null; then
+              echo "Healthy"; exit 0; fi
+            echo "Waiting ($i)"; sleep 10; done; echo "Failed"; exit 1
