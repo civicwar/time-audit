@@ -1,0 +1,52 @@
+name: One-Off TLS Setup
+
+on:
+  workflow_dispatch:
+    inputs:
+      domain:
+        description: "Domain to configure"
+        required: true
+        default: "time-audit.just4u.app"
+      email:
+        description: "Email for Let's Encrypt"
+        required: true
+        default: "admin@just4u.app"
+
+jobs:
+  configure-tls:
+    runs-on: ubuntu-latest
+    env:
+      DEPLOY_HOST: ${{ secrets.DEPLOY_HOST }}
+      DEPLOY_USER: ${{ secrets.DEPLOY_USER }}
+      SSH_PRIVATE_KEY: ${{ secrets.DEPLOY_SSH_KEY }}
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Prepare SSH
+        run: |
+          install -m 600 -D /dev/null ~/.ssh/id_rsa
+          echo "$SSH_PRIVATE_KEY" > ~/.ssh/id_rsa
+          ssh-keyscan -H "$DEPLOY_HOST" >> ~/.ssh/known_hosts
+
+      - name: Upload TLS script
+        run: |
+          rsync -az infrastructure/setup_tls.sh ${DEPLOY_USER}@${DEPLOY_HOST}:/tmp/setup_tls.sh
+          ssh ${DEPLOY_USER}@${DEPLOY_HOST} 'sudo mv /tmp/setup_tls.sh /usr/local/bin/setup_tls.sh && sudo chmod +x /usr/local/bin/setup_tls.sh'
+
+      - name: Patch script with inputs
+        run: |
+          ssh ${DEPLOY_USER}@${DEPLOY_HOST} "sudo sed -i 's|DOMAIN=\"time-audit.just4u.app\"|DOMAIN=\"${{ github.event.inputs.domain }}\"|' /usr/local/bin/setup_tls.sh"
+          ssh ${DEPLOY_USER}@${DEPLOY_HOST} "sudo sed -i 's|EMAIL=\"admin@just4u.app\"|EMAIL=\"${{ github.event.inputs.email }}\"|' /usr/local/bin/setup_tls.sh"
+
+      - name: Run TLS setup
+        run: |
+          ssh ${DEPLOY_USER}@${DEPLOY_HOST} 'sudo /usr/local/bin/setup_tls.sh'
+
+      - name: Verify HTTPS health
+        run: |
+          for i in {1..12}; do
+            if curl -fsS https://${{ github.event.inputs.domain }}/api/health >/dev/null; then
+              echo "Healthy over HTTPS"; exit 0; fi
+            echo "Waiting for HTTPS availability ($i)"; sleep 10;
+          done; echo "Health check failed"; exit 1
