@@ -8,6 +8,7 @@
         prepend-icon="mdi-file-upload"
         :disabled="loading"
         required
+        :multiple="false"
       />
       <v-text-field
         v-model.number="bigTaskHours"
@@ -89,12 +90,15 @@ const bigTaskHours = ref(8.0)
 
 const submit = async () => {
   if (!file.value) return
+  // Vuetify v-file-input may provide a File or an array of File
+  const chosen = Array.isArray(file.value) ? file.value[0] : file.value
+  if (!chosen) return
   loading.value = true
   error.value = ''
   results.value = null
   try {
     const formData = new FormData()
-    formData.append('file', file.value)
+    formData.append('file', chosen)
     formData.append('big_task_hours', bigTaskHours.value)
     const { data } = await axios.post('/api/audit', formData, {
       headers: { 'Content-Type': 'multipart/form-data' }

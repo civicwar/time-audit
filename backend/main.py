@@ -20,25 +20,9 @@ app.add_middleware(
 
 OUTPUT_DIR = "output"
 
-# Mount static reports (will be ensured later in startup if missing)
 if not os.path.exists(OUTPUT_DIR):
     os.makedirs(OUTPUT_DIR, exist_ok=True)
 app.mount("/reports", StaticFiles(directory=OUTPUT_DIR), name="reports")
-
-# Frontend SPA mount (serve built Vue app if present)
-FRONTEND_DIST = os.path.join(os.path.dirname(__file__), "..", "frontend", "dist")
-FRONTEND_DIST = os.path.abspath(FRONTEND_DIST)
-if os.path.isdir(FRONTEND_DIST):
-    app.mount(
-        "/", StaticFiles(directory=FRONTEND_DIST, html=True), name="frontend"
-    )
-
-    @app.get("/{full_path:path}")
-    async def spa_fallback(full_path: str):  # pragma: no cover
-        index_path = os.path.join(FRONTEND_DIST, "index.html")
-        if os.path.exists(index_path):
-            return FileResponse(index_path)
-        return Response(status_code=404)
 
 
 @app.post("/api/audit")
@@ -59,6 +43,23 @@ async def audit_csv(file: UploadFile = File(...), big_task_hours: float = 8.0):
     return results
 
 
+@app.options("/api/audit")
+async def audit_options():  # explicit CORS preflight handler
+    return Response(status_code=200)
+
+
 @app.get("/api/health")
 async def health():
     return {"status": "ok"}
+
+# Mount frontend last to avoid overshadowing /api routes
+FRONTEND_DIST = os.path.abspath(os.path.join(os.path.dirname(__file__), "..", "frontend", "dist"))
+if os.path.isdir(FRONTEND_DIST):
+    app.mount("/", StaticFiles(directory=FRONTEND_DIST, html=True), name="frontend")
+
+    @app.get("/{full_path:path}")
+    async def spa_fallback(full_path: str):  # pragma: no cover
+        index_path = os.path.join(FRONTEND_DIST, "index.html")
+        if os.path.exists(index_path):
+            return FileResponse(index_path)
+        return Response(status_code=404)
