@@ -75,9 +75,9 @@ runcmd:
   - chown deploy:deploy /opt/time-audit
 
   # Python venv
-  - python3 -m venv /opt/time-audit/venv
-  - /opt/time-audit/venv/bin/pip install --upgrade pip
-  - /opt/time-audit/venv/bin/pip install fastapi uvicorn[standard] pandas python-multipart
+    - sudo -u deploy python3 -m venv /opt/time-audit/venv
+    - sudo -u deploy /opt/time-audit/venv/bin/python -m pip install --upgrade pip
+    - sudo -u deploy /opt/time-audit/venv/bin/python -m pip install fastapi uvicorn[standard] pandas python-multipart
 
   # Enable and start backend (will 404 until code deployed)
   - systemctl daemon-reload
