@@ -36,15 +36,42 @@
           hide-details
           label="Group by date"
         />
+        <v-btn
+          color="primary"
+          variant="outlined"
+          :disabled="!canDownloadSelectedReport"
+          @click="downloadSelectedReport"
+        >
+          Download report.json
+        </v-btn>
         <div class="text-body-2">Total Entries: {{ filteredRows.length }}</div>
       </div>
+      <v-expansion-panels v-if="groupByDate" multiple>
+        <v-expansion-panel
+          v-for="group in dateGroups"
+          :key="group.date"
+        >
+          <v-expansion-panel-title>
+            {{ group.date }} ({{ group.items.length }})
+          </v-expansion-panel-title>
+          <v-expansion-panel-text>
+            <v-data-table
+              :headers="groupedHeaders"
+              :items="group.items"
+              density="comfortable"
+              item-value="id"
+              :sort-by="[{ key: 'user', order: 'asc' }, { key: 'description', order: 'asc' }]"
+            />
+          </v-expansion-panel-text>
+        </v-expansion-panel>
+      </v-expansion-panels>
       <v-data-table
+        v-else
         :headers="headers"
         :items="filteredRows"
         density="comfortable"
         item-value="id"
-        :sort-by="[{ key: 'date', order: 'asc' }]"
-        :group-by="tableGroupBy"
+        :sort-by="[{ key: 'date', order: 'asc' }, { key: 'user', order: 'asc' }]"
       />
     </div>
   </v-card>
@@ -68,12 +95,20 @@ const props = defineProps({
 const loading = ref(false)
 const error = ref('')
 const rows = ref([])
+const reportFiles = ref([])
 const selectedUser = ref('All users')
 const groupByDate = ref(true)
 
 const headers = [
   { title: 'User', key: 'user' },
   { title: 'Date', key: 'date' },
+  { title: 'Task', key: 'description' },
+  { title: 'Duration (h)', key: 'duration' },
+  { title: 'Duration', key: 'duration_hm' },
+]
+
+const groupedHeaders = [
+  { title: 'User', key: 'user' },
   { title: 'Task', key: 'description' },
   { title: 'Duration (h)', key: 'duration' },
   { title: 'Duration', key: 'duration_hm' },
@@ -94,9 +129,26 @@ const filteredRows = computed(() => {
   return rows.value.filter((r) => r.user === selectedUser.value)
 })
 
-const tableGroupBy = computed(() => {
-  if (!groupByDate.value) return []
-  return [{ key: 'date', order: 'asc' }]
+const selectedReportFile = computed(() => {
+  if (selectedUser.value === 'All users') return null
+  return reportFiles.value.find((rf) => rf.user === selectedUser.value) || null
+})
+
+const canDownloadSelectedReport = computed(() => Boolean(selectedReportFile.value?.relative_path))
+
+const dateGroups = computed(() => {
+  const grouped = filteredRows.value.reduce((acc, row) => {
+    if (!acc[row.date]) acc[row.date] = []
+    acc[row.date].push(row)
+    return acc
+  }, {})
+
+  return Object.keys(grouped)
+    .sort((a, b) => String(a).localeCompare(String(b)))
+    .map((date) => ({
+      date,
+      items: grouped[date],
+    }))
 })
 
 const loadReport = async () => {
@@ -109,16 +161,18 @@ const loadReport = async () => {
   loading.value = true
   error.value = ''
   rows.value = []
+  reportFiles.value = []
   try {
     const { data: runData } = await axios.get(`/api/reports/${runDir.value}`)
-    const reportFiles = runData?.report_files || []
-    if (!reportFiles.length) {
+    const files = runData?.report_files || []
+    reportFiles.value = files
+    if (!files.length) {
       rows.value = []
       return
     }
 
     const reportResponses = await Promise.all(
-      reportFiles.map(async (rf) => {
+      files.map(async (rf) => {
         const response = await axios.get(`/reports/${rf.relative_path}`)
         return { user: rf.user, report: response.data }
       })
@@ -150,6 +204,25 @@ const loadReport = async () => {
     error.value = e.response?.data?.detail || 'Could not load run reports.'
   } finally {
     loading.value = false
+  }
+}
+
+const downloadSelectedReport = async () => {
+  if (!selectedReportFile.value) return
+  try {
+    const response = await axios.get(`/reports/${selectedReportFile.value.relative_path}`, {
+      responseType: 'blob',
+    })
+    const blobUrl = window.URL.createObjectURL(response.data)
+    const link = document.createElement('a')
+    link.href = blobUrl
+    link.download = `${selectedUser.value.replace(/\s+/g, '_').toLowerCase()}_report.json`
+    document.body.appendChild(link)
+    link.click()
+    document.body.removeChild(link)
+    window.URL.revokeObjectURL(blobUrl)
+  } catch (e) {
+    error.value = e.response?.data?.detail || 'Could not download selected report.'
   }
 }
 
