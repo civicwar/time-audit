@@ -194,6 +194,10 @@ def generate_time_audit(
                 "relative_path": f"{run_dir_name}/{filename}",
             })
 
+        manifest_path = os.path.join(run_dir_path, "manifest.json")
+        with open(manifest_path, "w") as f:
+            json.dump({"report_files": report_files}, f, indent=4)
+
     return {
         "overlap_per_user": overlap_per_user,
         "time_stats": time_stats,
