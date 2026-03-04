@@ -7,6 +7,8 @@ from starlette.responses import Response
 
 import os
 import json
+import io
+import zipfile
 
 app = FastAPI(title="Time Audit API")
 
@@ -53,6 +55,38 @@ async def audit_options():  # explicit CORS preflight handler
 @app.get("/api/health")
 async def health():
     return {"status": "ok"}
+
+
+@app.get("/api/reports/{run_dir}/zip")
+async def download_run_reports_zip(run_dir: str):
+    if "/" in run_dir or ".." in run_dir:
+        raise HTTPException(status_code=400, detail="Invalid run directory")
+
+    run_path = os.path.join(OUTPUT_DIR, run_dir)
+    if not os.path.isdir(run_path):
+        raise HTTPException(status_code=404, detail="Run directory not found")
+
+    report_names = [
+        name for name in sorted(os.listdir(run_path))
+        if name.endswith("_report.json")
+    ]
+    if not report_names:
+        raise HTTPException(status_code=404, detail="No reports found for this run")
+
+    zip_buffer = io.BytesIO()
+    with zipfile.ZipFile(zip_buffer, mode="w", compression=zipfile.ZIP_DEFLATED) as archive:
+        for name in report_names:
+            file_path = os.path.join(run_path, name)
+            archive.write(file_path, arcname=name)
+
+    zip_buffer.seek(0)
+    return Response(
+        content=zip_buffer.getvalue(),
+        media_type="application/zip",
+        headers={
+            "Content-Disposition": f'attachment; filename="{run_dir}_reports.zip"'
+        },
+    )
 
 
 @app.get("/api/reports/{run_dir}")

@@ -42,7 +42,15 @@
           :disabled="!canDownloadSelectedReport"
           @click="downloadSelectedReport"
         >
-          Download report.json
+          {{ downloadSelectedButtonText }}
+        </v-btn>
+        <v-btn
+          color="primary"
+          variant="outlined"
+          :disabled="!canDownloadAllReportsZip"
+          @click="downloadAllReportsZip"
+        >
+          Download all reports.zip
         </v-btn>
         <div class="text-body-2">Total Entries: {{ filteredRows.length }}</div>
       </div>
@@ -136,6 +144,13 @@ const selectedReportFile = computed(() => {
 
 const canDownloadSelectedReport = computed(() => Boolean(selectedReportFile.value?.relative_path))
 
+const canDownloadAllReportsZip = computed(() => Boolean(runDir.value && reportFiles.value.length))
+
+const downloadSelectedButtonText = computed(() => {
+  if (selectedUser.value === 'All users') return 'Select a user to download report.json'
+  return `Download ${selectedUser.value} report.json`
+})
+
 const dateGroups = computed(() => {
   const grouped = filteredRows.value.reduce((acc, row) => {
     if (!acc[row.date]) acc[row.date] = []
@@ -223,6 +238,25 @@ const downloadSelectedReport = async () => {
     window.URL.revokeObjectURL(blobUrl)
   } catch (e) {
     error.value = e.response?.data?.detail || 'Could not download selected report.'
+  }
+}
+
+const downloadAllReportsZip = async () => {
+  if (!canDownloadAllReportsZip.value) return
+  try {
+    const response = await axios.get(`/api/reports/${runDir.value}/zip`, {
+      responseType: 'blob',
+    })
+    const blobUrl = window.URL.createObjectURL(response.data)
+    const link = document.createElement('a')
+    link.href = blobUrl
+    link.download = `${runDir.value}_reports.zip`
+    document.body.appendChild(link)
+    link.click()
+    document.body.removeChild(link)
+    window.URL.revokeObjectURL(blobUrl)
+  } catch (e) {
+    error.value = e.response?.data?.detail || 'Could not download reports zip.'
   }
 }
 
