@@ -62,13 +62,12 @@
       </v-expansion-panels>
 
       <v-divider class="my-4" />
-      <h3 class="text-h6 mb-2">Download Per-User JSON Reports (this run)</h3>
+      <h3 class="text-h6 mb-2">Review Per-User Reports (this run)</h3>
       <v-chip-group column v-if="results.report_files && results.report_files.length">
         <v-chip
           v-for="rf in results.report_files"
           :key="rf.relative_path"
-          :href="`/reports/${rf.relative_path}`"
-          target="_blank"
+          :href="reportReviewLink(rf)"
           label
           variant="outlined"
           color="primary"
@@ -87,6 +86,12 @@ const results = ref(null)
 const error = ref('')
 const loading = ref(false)
 const bigTaskHours = ref(8.0)
+
+const reportReviewLink = (rf) => {
+  const encodedPath = encodeURIComponent(rf.relative_path)
+  const encodedUser = encodeURIComponent(rf.user)
+  return `#/report/${encodedPath}?user=${encodedUser}`
+}
 
 const submit = async () => {
   if (!file.value) return

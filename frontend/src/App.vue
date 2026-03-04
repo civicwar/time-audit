@@ -5,12 +5,55 @@
     </v-app-bar>
     <v-main>
       <v-container class="py-6">
-        <upload-audit />
+        <upload-audit v-if="route.name === 'upload'" />
+        <user-report-review
+          v-else-if="route.name === 'report'"
+          :report-path="route.reportPath"
+          :user="route.user"
+        />
       </v-container>
     </v-main>
   </v-app>
 </template>
 
 <script setup>
+import { onBeforeUnmount, onMounted, ref } from 'vue'
 import UploadAudit from './components/UploadAudit.vue'
+import UserReportReview from './components/UserReportReview.vue'
+
+const route = ref({
+  name: 'upload',
+  reportPath: '',
+  user: '',
+})
+
+const updateRouteFromHash = () => {
+  const hash = window.location.hash || '#/'
+  if (hash.startsWith('#/report/')) {
+    const rest = hash.replace('#/report/', '')
+    const [rawPath, queryString = ''] = rest.split('?')
+    const params = new URLSearchParams(queryString)
+    route.value = {
+      name: 'report',
+      reportPath: decodeURIComponent(rawPath || ''),
+      user: params.get('user') || '',
+    }
+    return
+  }
+
+  route.value = {
+    name: 'upload',
+    reportPath: '',
+    user: '',
+  }
+}
+
+onMounted(() => {
+  updateRouteFromHash()
+  window.addEventListener('hashchange', updateRouteFromHash)
+})
+
+onBeforeUnmount(() => {
+  window.removeEventListener('hashchange', updateRouteFromHash)
+})
 </script>
