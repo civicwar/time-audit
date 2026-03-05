@@ -52,9 +52,9 @@ runcmd:
   - chown deploy:deploy /opt/time-audit
 
   # Create Python venv (empty project initially; app code delivered by CI)
-  - python3 -m venv /opt/time-audit/venv
-  - /opt/time-audit/venv/bin/pip install --upgrade pip
-  - /opt/time-audit/venv/bin/pip install fastapi uvicorn[standard] pandas python-multipart
+  - sudo -u deploy python3 -m venv /opt/time-audit/venv
+  - sudo -u deploy /opt/time-audit/venv/bin/python -m pip install --upgrade pip
+  - sudo -u deploy /opt/time-audit/venv/bin/python -m pip install fastapi uvicorn[standard] pandas python-multipart
 
   # Enable service (will fail to fully start until code is deployed, that's okay)
   - systemctl daemon-reload

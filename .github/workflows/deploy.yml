@@ -60,7 +60,7 @@ jobs:
 
       - name: Install backend dependencies on server
         run: |
-          ssh ${DEPLOY_USER}@${DEPLOY_HOST} 'cd ${DEPLOY_PATH} && /opt/time-audit/venv/bin/pip install --upgrade pip && /opt/time-audit/venv/bin/pip install fastapi uvicorn[standard] pandas python-multipart'
+          ssh ${DEPLOY_USER}@${DEPLOY_HOST} "cd ${DEPLOY_PATH} && sudo /opt/time-audit/venv/bin/python -m pip install --upgrade fastapi uvicorn[standard] pandas python-multipart"
 
       - name: Restart service
         run: |
