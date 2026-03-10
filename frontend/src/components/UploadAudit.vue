@@ -62,23 +62,20 @@
       </v-expansion-panels>
 
       <v-divider class="my-4" />
-      <h3 class="text-h6 mb-2">Review Per-User Reports (this run)</h3>
-      <v-chip-group column v-if="results.report_files && results.report_files.length">
-        <v-chip
-          v-for="rf in results.report_files"
-          :key="rf.relative_path"
-          :href="reportReviewLink(rf)"
-          label
-          variant="outlined"
-          color="primary"
-        >{{ rf.user }}</v-chip>
-      </v-chip-group>
+      <h3 class="text-h6 mb-2">Review Entry Reports (this run)</h3>
+      <v-btn
+        v-if="entryReportsLink"
+        color="primary"
+        :href="entryReportsLink"
+      >
+        See Entry Reports
+      </v-btn>
     </div>
   </v-card>
 </template>
 
 <script setup>
-import { ref } from 'vue'
+import { computed, ref } from 'vue'
 import axios from 'axios'
 
 const file = ref(null)
@@ -87,11 +84,13 @@ const error = ref('')
 const loading = ref(false)
 const bigTaskHours = ref(8.0)
 
-const reportReviewLink = (rf) => {
-  const encodedPath = encodeURIComponent(rf.relative_path)
-  const encodedUser = encodeURIComponent(rf.user)
-  return `#/report/${encodedPath}?user=${encodedUser}`
-}
+const entryReportsLink = computed(() => {
+  const files = results.value?.report_files || []
+  if (!files.length) return ''
+  const [runDir] = String(files[0].relative_path || '').split('/')
+  if (!runDir) return ''
+  return `#/reports/${encodeURIComponent(runDir)}/reviews`
+})
 
 const submit = async () => {
   if (!file.value) return

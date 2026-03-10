@@ -29,13 +29,24 @@ const route = ref({
 
 const updateRouteFromHash = () => {
   const hash = window.location.hash || '#/'
+  const reportRouteMatch = hash.match(/^#\/reports\/([^/?#]+)\/reviews(?:\?.*)?$/)
+  if (reportRouteMatch) {
+    route.value = {
+      name: 'report',
+      reportPath: decodeURIComponent(reportRouteMatch[1] || ''),
+      user: '',
+    }
+    return
+  }
+
   if (hash.startsWith('#/report/')) {
     const rest = hash.replace('#/report/', '')
     const [rawPath, queryString = ''] = rest.split('?')
     const params = new URLSearchParams(queryString)
+    const [runDir] = decodeURIComponent(rawPath || '').split('/')
     route.value = {
       name: 'report',
-      reportPath: decodeURIComponent(rawPath || ''),
+      reportPath: runDir || '',
       user: params.get('user') || '',
     }
     return
