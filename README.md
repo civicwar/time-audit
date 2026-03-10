@@ -68,6 +68,21 @@ poetry install
 poetry run uvicorn backend.main:app --reload
 ```
 
+The backend now initializes a local SQLite database automatically at `time_audit.db`.
+Set `TIME_AUDIT_DATABASE_URL` if you want to point it somewhere else, for example:
+
+```bash
+export TIME_AUDIT_DATABASE_URL=sqlite:///./time_audit.db
+poetry run uvicorn backend.main:app --reload
+```
+
+Alembic is configured for database migrations. Common commands:
+
+```bash
+poetry run alembic revision -m "create example table"
+poetry run alembic upgrade head
+```
+
 Frontend (Vue3 + Vuetify via Vite):
 
 ```bash
@@ -90,3 +105,8 @@ API response includes:
 }
 ```
 Use `relative_path` under `/reports/` to download.
+
+Current database framework status:
+- SQLite connection/session management is available in `backend.database`.
+- Alembic migration scaffolding is available under `alembic/`.
+- No application tables/models are defined yet.

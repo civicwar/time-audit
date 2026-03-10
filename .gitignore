@@ -2,6 +2,8 @@ report.csv
 output/
 .old
 .venv/
+*.db
+*.sqlite3
 
 *.pyc
 node_modules/

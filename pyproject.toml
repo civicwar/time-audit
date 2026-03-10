@@ -12,6 +12,8 @@ ipython = "^8.25.0"
 fastapi = "^0.112.0"
 uvicorn = "^0.30.0"
 python-multipart = "^0.0.9"
+sqlalchemy = "^2.0.39"
+alembic = "^1.15.2"
 
 
 [build-system]

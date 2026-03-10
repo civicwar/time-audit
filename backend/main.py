@@ -1,16 +1,26 @@
-from fastapi import FastAPI, UploadFile, File, HTTPException
-from fastapi.middleware.cors import CORSMiddleware
-from fastapi.staticfiles import StaticFiles
-from time_audit import generate_time_audit
-from fastapi.responses import FileResponse
-from starlette.responses import Response
-
-import os
-import json
+from contextlib import asynccontextmanager
 import io
+import json
+import os
 import zipfile
 
-app = FastAPI(title="Time Audit API")
+from fastapi import FastAPI, File, HTTPException, UploadFile
+from fastapi.middleware.cors import CORSMiddleware
+from fastapi.responses import FileResponse
+from fastapi.staticfiles import StaticFiles
+from starlette.responses import Response
+from time_audit import generate_time_audit
+
+from backend.database import DATABASE_URL, init_db
+
+
+@asynccontextmanager
+async def lifespan(_: FastAPI):
+    init_db()
+    yield
+
+
+app = FastAPI(title="Time Audit API", lifespan=lifespan)
 
 # CORS (adjust origins as needed)
 app.add_middleware(
@@ -29,7 +39,10 @@ app.mount("/reports", StaticFiles(directory=OUTPUT_DIR), name="reports")
 
 
 @app.post("/api/audit")
-async def audit_csv(file: UploadFile = File(...), big_task_hours: float = 8.0):
+async def audit_csv(
+    file: UploadFile = File(...),
+    big_task_hours: float = 8.0,
+):
     if not file.filename or not file.filename.lower().endswith('.csv'):
         raise HTTPException(status_code=400, detail="File must be a CSV")
     content = await file.read()
@@ -54,7 +67,8 @@ async def audit_options():  # explicit CORS preflight handler
 
 @app.get("/api/health")
 async def health():
-    return {"status": "ok"}
+    return {"status": "ok", "database_url": DATABASE_URL}
+
 
 
 @app.get("/api/reports/{run_dir}/zip")
