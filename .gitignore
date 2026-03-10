@@ -2,6 +2,7 @@ report.csv
 output/
 .old
 .venv/
+.env
 *.db
 *.sqlite3
 

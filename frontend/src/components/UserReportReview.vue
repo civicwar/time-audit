@@ -2,7 +2,7 @@
   <v-card elevation="2" class="pa-4">
     <div class="d-flex align-center justify-space-between mb-4">
       <h2 class="text-h6">User Report Review</h2>
-      <v-btn color="primary" variant="text" href="#/">Back to Upload</v-btn>
+      <v-btn color="primary" variant="text" href="/in">Back to Workspace</v-btn>
     </div>
 
     <v-alert
@@ -87,7 +87,8 @@
 
 <script setup>
 import { computed, onMounted, ref, watch } from 'vue'
-import axios from 'axios'
+
+import api from '../services/api'
 
 const props = defineProps({
   reportPath: {
@@ -178,7 +179,7 @@ const loadReport = async () => {
   rows.value = []
   reportFiles.value = []
   try {
-    const { data: runData } = await axios.get(`/api/reports/${runDir.value}`)
+    const { data: runData } = await api.get(`/api/in/reports/${runDir.value}`)
     const files = runData?.report_files || []
     reportFiles.value = files
     if (!files.length) {
@@ -188,7 +189,7 @@ const loadReport = async () => {
 
     const reportResponses = await Promise.all(
       files.map(async (rf) => {
-        const response = await axios.get(`/reports/${rf.relative_path}`)
+        const response = await api.get(`/api/in/reports/files/${rf.relative_path}`)
         return { user: rf.user, report: response.data }
       })
     )
@@ -225,7 +226,7 @@ const loadReport = async () => {
 const downloadSelectedReport = async () => {
   if (!selectedReportFile.value) return
   try {
-    const response = await axios.get(`/reports/${selectedReportFile.value.relative_path}`, {
+    const response = await api.get(`/api/in/reports/files/${selectedReportFile.value.relative_path}`, {
       responseType: 'blob',
     })
     const blobUrl = window.URL.createObjectURL(response.data)
@@ -244,7 +245,7 @@ const downloadSelectedReport = async () => {
 const downloadAllReportsZip = async () => {
   if (!canDownloadAllReportsZip.value) return
   try {
-    const response = await axios.get(`/api/reports/${runDir.value}/zip`, {
+    const response = await api.get(`/api/in/reports/${runDir.value}/zip`, {
       responseType: 'blob',
     })
     const blobUrl = window.URL.createObjectURL(response.data)

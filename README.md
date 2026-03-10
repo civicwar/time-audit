@@ -65,14 +65,22 @@ Backend (FastAPI):
 
 ```bash
 poetry install
+poetry run alembic upgrade head
 poetry run uvicorn backend.main:app --reload
 ```
 
 The backend now initializes a local SQLite database automatically at `time_audit.db`.
+Create a local `.env` file first and set the admin seed password there:
+
+```bash
+TIME_AUDIT_ADMIN_PASSWORD=change-this-admin-password
+```
+
 Set `TIME_AUDIT_DATABASE_URL` if you want to point it somewhere else, for example:
 
 ```bash
 export TIME_AUDIT_DATABASE_URL=sqlite:///./time_audit.db
+poetry run alembic upgrade head
 poetry run uvicorn backend.main:app --reload
 ```
 
@@ -82,6 +90,18 @@ Alembic is configured for database migrations. Common commands:
 poetry run alembic revision -m "create example table"
 poetry run alembic upgrade head
 ```
+
+Authentication is now enabled.
+Only the `admin` user is created during seeding, and its password is read from `.env` via `TIME_AUDIT_ADMIN_PASSWORD`.
+
+Login is protected against brute-force attempts with in-memory lockouts by client IP and username.
+Tunable environment variables:
+- `TIME_AUDIT_LOGIN_MAX_ATTEMPTS_PER_IP` default `10`
+- `TIME_AUDIT_LOGIN_MAX_ATTEMPTS_PER_USERNAME` default `5`
+- `TIME_AUDIT_LOGIN_ATTEMPT_WINDOW_SECONDS` default `900`
+- `TIME_AUDIT_LOGIN_LOCKOUT_SECONDS` default `900`
+
+Private backend endpoints live under `/api/in/...` and frontend private views live under `/in/...`.
 
 Frontend (Vue3 + Vuetify via Vite):
 
@@ -109,4 +129,5 @@ Use `relative_path` under `/reports/` to download.
 Current database framework status:
 - SQLite connection/session management is available in `backend.database`.
 - Alembic migration scaffolding is available under `alembic/`.
-- No application tables/models are defined yet.
+- Authentication and user management are backed by the `users` table.
+- User roles are hardcoded to `Admin`, `Developer`, and `Reviewer`.

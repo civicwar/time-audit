@@ -13,8 +13,7 @@ export default defineConfig({
     port: 5173,
     host: true, // bind to 0.0.0.0 inside container
     proxy: {
-      '/api': 'http://localhost:8000',
-      '/reports': 'http://localhost:8000'
+      '/api': 'http://localhost:8000'
     }
   }
 })
