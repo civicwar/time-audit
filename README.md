@@ -109,6 +109,8 @@ Tunable environment variables:
 - `TIME_AUDIT_LOGIN_LOCKOUT_SECONDS` default `900`
 
 Private backend endpoints live under `/api/in/...` and frontend private views live under `/in/...`.
+The public CSV upload-and-analyze flow is available at `/` and uses `/api/audit` without creating persisted sessions.
+Persisted sessions are listed only in the private workspace and are created from Clockify by admins.
 
 Frontend (Vue3 + Vuetify via Vite):
 
@@ -120,12 +122,13 @@ npm run dev
 
 The frontend dev server proxies API calls to `http://localhost:8000` and report JSON files are available at `/reports/<run_dir>/<user>_report.json`.
 
-In the private workspace, users now select:
+In the private workspace, admins now select:
 - start date
 - end date
 - timezone
 
-The backend fetches the corresponding Clockify detailed report and runs the existing audit pipeline without requiring CSV upload.
+The backend fetches the corresponding Clockify detailed report and stores the generated run as a persisted session.
+Admins can rename or delete persisted sessions from the private workspace.
 
 API response includes:
 ```

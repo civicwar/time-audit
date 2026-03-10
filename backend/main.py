@@ -11,6 +11,7 @@ from backend.auth import router as auth_router
 from backend.clockify import router as clockify_router
 from backend.database import DATABASE_URL, init_db
 from backend.private import router as private_router
+from backend.public import router as public_router
 
 
 @asynccontextmanager
@@ -31,6 +32,7 @@ app.add_middleware(
 )
 
 app.include_router(auth_router)
+app.include_router(public_router)
 app.include_router(clockify_router)
 app.include_router(private_router)
 

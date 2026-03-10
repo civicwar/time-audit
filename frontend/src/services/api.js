@@ -41,7 +41,7 @@ api.interceptors.response.use(
     if (error.response?.status === 401) {
       clearSession()
       if (window.location.pathname.startsWith('/in')) {
-        window.location.assign('/')
+        window.location.assign('/login')
       }
     }
     return Promise.reject(error)

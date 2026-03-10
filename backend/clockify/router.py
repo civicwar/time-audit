@@ -13,7 +13,7 @@ router = APIRouter(prefix="/api/in/clockify", tags=["clockify"], dependencies=[D
 
 
 @router.get("/profile", response_model=ClockifyProfileResponse)
-async def get_clockify_profile() -> ClockifyProfileResponse:
+async def get_clockify_profile(_: User = Depends(require_roles(Role.ADMIN))) -> ClockifyProfileResponse:
     try:
         profile = await ClockifyClient().get_profile()
     except ClockifyConfigurationError:
@@ -34,7 +34,7 @@ async def get_clockify_profile() -> ClockifyProfileResponse:
 async def audit_from_clockify(
     payload: ClockifyAuditRequest,
     db: Session = Depends(get_db),
-    current_user: User = Depends(require_roles(Role.ADMIN, Role.DEVELOPER)),
+    current_user: User = Depends(require_roles(Role.ADMIN)),
 ):
     normalized_session_name = payload.session_name.strip() if payload.session_name else None
     if normalized_session_name and current_user.role != Role.ADMIN:

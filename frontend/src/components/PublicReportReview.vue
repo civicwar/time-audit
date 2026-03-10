@@ -1,8 +1,8 @@
 <template>
   <v-card elevation="2" class="pa-4">
     <div class="d-flex align-center justify-space-between mb-4">
-      <h2 class="text-h6">User Report Review</h2>
-      <v-btn color="primary" variant="text" :href="backHref">Back</v-btn>
+      <h2 class="text-h6">Public Report Review</h2>
+      <v-btn color="primary" variant="text" href="/">Back</v-btn>
     </div>
 
     <v-alert
@@ -107,7 +107,6 @@ const rows = ref([])
 const reportFiles = ref([])
 const selectedUser = ref('All users')
 const groupByDate = ref(true)
-const backHref = '/in'
 
 const headers = [
   { title: 'User', key: 'user' },
@@ -180,7 +179,7 @@ const loadReport = async () => {
   rows.value = []
   reportFiles.value = []
   try {
-    const { data: runData } = await api.get(`/api/in/reports/${runDir.value}`)
+    const { data: runData } = await api.get(`/api/reports/${runDir.value}`)
     const files = runData?.report_files || []
     reportFiles.value = files
     if (!files.length) {
@@ -190,7 +189,7 @@ const loadReport = async () => {
 
     const reportResponses = await Promise.all(
       files.map(async (rf) => {
-        const response = await api.get(`/api/in/reports/files/${rf.relative_path}`)
+        const response = await api.get(`/api/reports/files/${rf.relative_path}`)
         return { user: rf.user, report: response.data }
       })
     )
@@ -217,8 +216,8 @@ const loadReport = async () => {
     } else {
       selectedUser.value = 'All users'
     }
-  } catch (e) {
-    error.value = e.response?.data?.detail || 'Could not load run reports.'
+  } catch (requestError) {
+    error.value = requestError.response?.data?.detail || 'Could not load run reports.'
   } finally {
     loading.value = false
   }
@@ -227,7 +226,7 @@ const loadReport = async () => {
 const downloadSelectedReport = async () => {
   if (!selectedReportFile.value) return
   try {
-    const response = await api.get(`/api/in/reports/files/${selectedReportFile.value.relative_path}`, {
+    const response = await api.get(`/api/reports/files/${selectedReportFile.value.relative_path}`, {
       responseType: 'blob',
     })
     const blobUrl = window.URL.createObjectURL(response.data)
@@ -238,15 +237,15 @@ const downloadSelectedReport = async () => {
     link.click()
     document.body.removeChild(link)
     window.URL.revokeObjectURL(blobUrl)
-  } catch (e) {
-    error.value = e.response?.data?.detail || 'Could not download selected report.'
+  } catch (requestError) {
+    error.value = requestError.response?.data?.detail || 'Could not download selected report.'
   }
 }
 
 const downloadAllReportsZip = async () => {
   if (!canDownloadAllReportsZip.value) return
   try {
-    const response = await api.get(`/api/in/reports/${runDir.value}/zip`, {
+    const response = await api.get(`/api/reports/${runDir.value}/zip`, {
       responseType: 'blob',
     })
     const blobUrl = window.URL.createObjectURL(response.data)
@@ -257,8 +256,8 @@ const downloadAllReportsZip = async () => {
     link.click()
     document.body.removeChild(link)
     window.URL.revokeObjectURL(blobUrl)
-  } catch (e) {
-    error.value = e.response?.data?.detail || 'Could not download reports zip.'
+  } catch (requestError) {
+    error.value = requestError.response?.data?.detail || 'Could not download reports zip.'
   }
 }
 

@@ -40,7 +40,7 @@
           :items="roles"
           hide-details
           density="compact"
-          variant="underlined"
+          variant="outlined"
           @update:model-value="markDirty(item.id)"
         />
       </template>
@@ -50,7 +50,7 @@
           v-model="item.full_name"
           hide-details
           density="compact"
-          variant="underlined"
+          variant="outlined"
           @update:model-value="markDirty(item.id)"
         />
       </template>
@@ -72,7 +72,7 @@
           label="New password"
           hide-details
           density="compact"
-          variant="underlined"
+          variant="outlined"
           @update:model-value="markDirty(item.id)"
         />
       </template>
