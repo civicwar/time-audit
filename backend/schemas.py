@@ -36,3 +36,23 @@ class TokenResponse(BaseModel):
     access_token: str
     token_type: str
     user: UserRead
+
+
+class AuditSessionRead(BaseModel):
+    id: Optional[int] = None
+    name: Optional[str] = None
+    run_dir: str
+    report_files: list[dict]
+    source_type: str
+    created_at: Optional[datetime] = None
+    created_by_username: Optional[str] = None
+    clockify_workspace_name: Optional[str] = None
+    start_date: Optional[str] = None
+    end_date: Optional[str] = None
+    timezone: Optional[str] = None
+    big_task_hours: Optional[float] = None
+    is_legacy: bool = False
+
+
+class AuditSessionUpdate(BaseModel):
+    name: Optional[str] = None

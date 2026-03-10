@@ -2,17 +2,18 @@ import io
 import json
 import os
 import zipfile
+from datetime import datetime, timezone
 from pathlib import Path
 
 from fastapi import APIRouter, Depends, File, HTTPException, UploadFile, status
 from fastapi.responses import FileResponse, Response
-from sqlalchemy import select
+from sqlalchemy import inspect, select
 from sqlalchemy.orm import Session
 
 from backend.auth import get_current_user, require_roles
-from backend.database import get_db
-from backend.models import Role, User
-from backend.schemas import UserCreate, UserRead, UserUpdate
+from backend.database import engine, get_db
+from backend.models import AuditSession, Role, User
+from backend.schemas import AuditSessionRead, AuditSessionUpdate, UserCreate, UserRead, UserUpdate
 from backend.security import get_password_hash
 from time_audit import generate_time_audit
 
@@ -56,20 +57,78 @@ def _manifest_for_run(run_path: Path) -> list[dict]:
     return report_files
 
 
+def _parse_run_timestamp(run_dir: str) -> datetime | None:
+    ts_part = run_dir.split("_")[0]
+    try:
+        return datetime.strptime(ts_part, "%Y%m%dT%H%M%SZ").replace(tzinfo=timezone.utc)
+    except ValueError:
+        return None
+
+
+def _serialize_audit_session(session: AuditSession, report_files: list[dict]) -> AuditSessionRead:
+    return AuditSessionRead(
+        id=session.id,
+        name=session.name,
+        run_dir=session.run_dir,
+        report_files=report_files,
+        source_type=session.source_type,
+        created_at=session.created_at,
+        created_by_username=session.created_by.username if session.created_by else None,
+        clockify_workspace_name=session.clockify_workspace_name,
+        start_date=session.start_date.isoformat() if session.start_date else None,
+        end_date=session.end_date.isoformat() if session.end_date else None,
+        timezone=session.timezone,
+        big_task_hours=session.big_task_hours,
+        is_legacy=False,
+    )
+
+
+def _serialize_legacy_run(run_dir: str, report_files: list[dict]) -> AuditSessionRead:
+    return AuditSessionRead(
+        run_dir=run_dir,
+        report_files=report_files,
+        source_type="legacy",
+        created_at=_parse_run_timestamp(run_dir),
+        is_legacy=True,
+    )
+
+
+def _sort_timestamp(value: datetime | None) -> datetime:
+    if value is None:
+        return datetime.min.replace(tzinfo=timezone.utc)
+    if value.tzinfo is None:
+        return value.replace(tzinfo=timezone.utc)
+    return value.astimezone(timezone.utc)
+
+
 @router.get("/runs")
-async def list_runs():
+async def list_runs(db: Session = Depends(get_db)):
     _ensure_output_dir()
-    items = []
-    for entry in sorted(OUTPUT_DIR.iterdir(), reverse=True):
-        if not entry.is_dir():
+    output_entries = {
+        entry.name: entry for entry in OUTPUT_DIR.iterdir() if entry.is_dir()
+    }
+
+    items: list[AuditSessionRead] = []
+    seen_run_dirs: set[str] = set()
+
+    if inspect(engine).has_table("audit_sessions"):
+        sessions = db.execute(
+            select(AuditSession).order_by(AuditSession.created_at.desc(), AuditSession.id.desc())
+        ).scalars().all()
+        for session in sessions:
+            run_path = output_entries.get(session.run_dir)
+            if run_path is None:
+                continue
+            items.append(_serialize_audit_session(session, _manifest_for_run(run_path)))
+            seen_run_dirs.add(session.run_dir)
+
+    for run_dir, run_path in sorted(output_entries.items(), reverse=True):
+        if run_dir in seen_run_dirs:
             continue
-        items.append(
-            {
-                "run_dir": entry.name,
-                "report_files": _manifest_for_run(entry),
-            }
-        )
-    return {"items": items}
+        items.append(_serialize_legacy_run(run_dir, _manifest_for_run(run_path)))
+
+    items.sort(key=lambda item: _sort_timestamp(item.created_at), reverse=True)
+    return {"items": [item.model_dump() for item in items]}
 
 
 @router.post("/audit")
@@ -144,6 +203,33 @@ async def download_report_file(relative_path: str):
 
     file_path = _safe_relative_output_path(relative_path)
     return FileResponse(file_path, media_type="application/json", filename=file_path.name)
+
+
+@router.patch("/sessions/{session_id}", response_model=AuditSessionRead)
+async def update_audit_session(
+    session_id: int,
+    payload: AuditSessionUpdate,
+    db: Session = Depends(get_db),
+    _: User = Depends(require_roles(Role.ADMIN)),
+):
+    if not inspect(engine).has_table("audit_sessions"):
+        raise HTTPException(status_code=404, detail="Audit sessions are not available yet.")
+
+    session_record = db.execute(
+        select(AuditSession).where(AuditSession.id == session_id)
+    ).scalar_one_or_none()
+    if session_record is None:
+        raise HTTPException(status_code=404, detail="Audit session not found.")
+
+    normalized_name = payload.name.strip() if payload.name else None
+    session_record.name = normalized_name or None
+    db.add(session_record)
+    db.commit()
+    db.refresh(session_record)
+
+    run_path = OUTPUT_DIR / session_record.run_dir
+    report_files = _manifest_for_run(run_path) if run_path.is_dir() else []
+    return _serialize_audit_session(session_record, report_files)
 
 
 @router.get("/users", response_model=list[UserRead])
