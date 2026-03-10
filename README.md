@@ -1,6 +1,6 @@
 ## Time Audit
 
-Python utilities to analyze Clockify detailed report exports.
+Python utilities to analyze Clockify detailed reports.
 
 ### Library Usage
 
@@ -57,7 +57,7 @@ generate_time_audit(
 ) -> dict
 ```
 
-This allows easy integration into a web endpoint that accepts an uploaded CSV and returns JSON.
+This allows easy integration into a web endpoint that accepts Clockify report data and returns JSON.
 
 ### Web App (Backend + Frontend)
 
@@ -70,10 +70,11 @@ poetry run uvicorn backend.main:app --reload
 ```
 
 The backend now initializes a local SQLite database automatically at `time_audit.db`.
-Create a local `.env` file first and set the admin seed password there:
+Create a local `.env` file first and set the admin seed password and Clockify API key there:
 
 ```bash
 TIME_AUDIT_ADMIN_PASSWORD=change-this-admin-password
+TIME_AUDIT_CLOCKIFY_API_KEY=your-clockify-api-key
 ```
 
 Set `TIME_AUDIT_DATABASE_URL` if you want to point it somewhere else, for example:
@@ -94,6 +95,12 @@ poetry run alembic upgrade head
 Authentication is now enabled.
 Only the `admin` user is created during seeding, and its password is read from `.env` via `TIME_AUDIT_ADMIN_PASSWORD`.
 
+Clockify detailed reports are fetched directly from the Clockify API using `TIME_AUDIT_CLOCKIFY_API_KEY`.
+Optional overrides:
+- `TIME_AUDIT_CLOCKIFY_WORKSPACE_ID` to pin a specific workspace instead of auto-detecting the active one
+- `TIME_AUDIT_CLOCKIFY_API_BASE_URL` to override the standard API host
+- `TIME_AUDIT_CLOCKIFY_REPORTS_BASE_URL` to override the reports API host
+
 Login is protected against brute-force attempts with in-memory lockouts by client IP and username.
 Tunable environment variables:
 - `TIME_AUDIT_LOGIN_MAX_ATTEMPTS_PER_IP` default `10`
@@ -113,6 +120,13 @@ npm run dev
 
 The frontend dev server proxies API calls to `http://localhost:8000` and report JSON files are available at `/reports/<run_dir>/<user>_report.json`.
 
+In the private workspace, users now select:
+- start date
+- end date
+- timezone
+
+The backend fetches the corresponding Clockify detailed report and runs the existing audit pipeline without requiring CSV upload.
+
 API response includes:
 ```
 {
@@ -126,8 +140,9 @@ API response includes:
 ```
 Use `relative_path` under `/reports/` to download.
 
-Current database framework status:
+Current app status:
 - SQLite connection/session management is available in `backend.database`.
 - Alembic migration scaffolding is available under `alembic/`.
 - Authentication and user management are backed by the `users` table.
 - User roles are hardcoded to `Admin`, `Developer`, and `Reviewer`.
+- Clockify integration lives in the dedicated `backend.clockify` module.

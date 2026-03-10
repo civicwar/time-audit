@@ -8,6 +8,7 @@ from fastapi.staticfiles import StaticFiles
 from starlette.responses import Response
 
 from backend.auth import router as auth_router
+from backend.clockify import router as clockify_router
 from backend.database import DATABASE_URL, init_db
 from backend.private import router as private_router
 
@@ -30,6 +31,7 @@ app.add_middleware(
 )
 
 app.include_router(auth_router)
+app.include_router(clockify_router)
 app.include_router(private_router)
 
 
