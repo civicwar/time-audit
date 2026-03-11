@@ -29,6 +29,10 @@ def _serialize_audit_session(session: AuditSession, report_files: list[dict]) ->
         end_date=session.end_date.isoformat() if session.end_date else None,
         timezone=session.timezone,
         big_task_hours=session.big_task_hours,
+        time_stats=session.time_stats,
+        overlap_per_user=session.overlap_per_user,
+        small_tasks_per_user=session.small_tasks_per_user,
+        big_tasks_per_user=session.big_tasks_per_user,
         is_legacy=False,
     )
 def _sort_timestamp(value: datetime | None) -> datetime:

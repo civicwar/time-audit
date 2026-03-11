@@ -152,12 +152,6 @@
             <pre>{{ results.big_tasks_per_user }}</pre>
           </v-expansion-panel-text>
         </v-expansion-panel>
-        <v-expansion-panel>
-          <v-expansion-panel-title>Report By User By Date</v-expansion-panel-title>
-          <v-expansion-panel-text>
-            <pre>{{ results.report_by_user_by_date }}</pre>
-          </v-expansion-panel-text>
-        </v-expansion-panel>
       </v-expansion-panels>
 
       <v-divider class="my-4" />
@@ -204,19 +198,18 @@
             <v-btn
               color="primary"
               variant="text"
+              @click="openAnalysisDialog(run)"
+            >
+              Analysis
+            </v-btn>
+            <v-btn
+              color="primary"
+              variant="text"
               :loading="refreshSavingId === run.id"
               :disabled="!canRefreshRun(run)"
               @click="refreshSession(run)"
             >
               Refresh
-            </v-btn>
-            <v-btn
-              color="secondary"
-              variant="text"
-              :loading="renameSavingId === run.id"
-              @click="saveSessionName(run)"
-            >
-              Save
             </v-btn>
             <v-btn
               color="error"
@@ -257,6 +250,44 @@
         </v-card-actions>
       </v-card>
     </v-dialog>
+
+    <v-dialog v-model="analysisDialogOpen" max-width="960">
+      <v-card>
+        <v-card-title>{{ analysisDialogTitle }}</v-card-title>
+        <v-card-text>
+          <v-expansion-panels v-if="selectedAnalysisRun" multiple>
+            <v-expansion-panel>
+              <v-expansion-panel-title>Time Stats</v-expansion-panel-title>
+              <v-expansion-panel-text>
+                <pre>{{ selectedAnalysisRun.time_stats }}</pre>
+              </v-expansion-panel-text>
+            </v-expansion-panel>
+            <v-expansion-panel>
+              <v-expansion-panel-title>Overlap Per User</v-expansion-panel-title>
+              <v-expansion-panel-text>
+                <pre>{{ selectedAnalysisRun.overlap_per_user }}</pre>
+              </v-expansion-panel-text>
+            </v-expansion-panel>
+            <v-expansion-panel>
+              <v-expansion-panel-title>Small Tasks (&lt; 0.01h)</v-expansion-panel-title>
+              <v-expansion-panel-text>
+                <pre>{{ selectedAnalysisRun.small_tasks_per_user }}</pre>
+              </v-expansion-panel-text>
+            </v-expansion-panel>
+            <v-expansion-panel>
+              <v-expansion-panel-title>Big Tasks (&gt; {{ selectedAnalysisRun.big_task_hours }}h)</v-expansion-panel-title>
+              <v-expansion-panel-text>
+                <pre>{{ selectedAnalysisRun.big_tasks_per_user }}</pre>
+              </v-expansion-panel-text>
+            </v-expansion-panel>
+          </v-expansion-panels>
+        </v-card-text>
+        <v-card-actions>
+          <v-spacer />
+          <v-btn variant="text" @click="closeAnalysisDialog">Close</v-btn>
+        </v-card-actions>
+      </v-card>
+    </v-dialog>
   </v-card>
 </template>
 
@@ -277,6 +308,8 @@ const renameDrafts = ref({})
 const renameDialogOpen = ref(false)
 const renameDialogSessionId = ref(null)
 const renameDialogValue = ref('')
+const analysisDialogOpen = ref(false)
+const selectedAnalysisRun = ref(null)
 const deleteError = ref('')
 const deleteSavingId = ref(null)
 const refreshError = ref('')
@@ -315,6 +348,10 @@ const entryReportsLink = computed(() => {
   const [runDir] = String(files[0].relative_path || '').split('/')
   if (!runDir) return ''
   return `/in/reports/${encodeURIComponent(runDir)}/reviews`
+})
+const analysisDialogTitle = computed(() => {
+  const run = selectedAnalysisRun.value
+  return run ? `Analysis: ${run.name || run.run_dir}` : 'Analysis'
 })
 
 const clockifyConfigured = computed(() => clockifyProfile.value.configured)
@@ -412,6 +449,16 @@ const closeRenameDialog = () => {
   renameDialogOpen.value = false
   renameDialogSessionId.value = null
   renameDialogValue.value = ''
+}
+
+const openAnalysisDialog = (run) => {
+  selectedAnalysisRun.value = run
+  analysisDialogOpen.value = true
+}
+
+const closeAnalysisDialog = () => {
+  analysisDialogOpen.value = false
+  selectedAnalysisRun.value = null
 }
 
 const loadClockifyProfile = async () => {

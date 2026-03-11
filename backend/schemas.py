@@ -51,6 +51,10 @@ class AuditSessionRead(BaseModel):
     end_date: Optional[str] = None
     timezone: Optional[str] = None
     big_task_hours: Optional[float] = None
+    time_stats: Optional[dict] = None
+    overlap_per_user: Optional[dict] = None
+    small_tasks_per_user: Optional[dict] = None
+    big_tasks_per_user: Optional[dict] = None
     is_legacy: bool = False
 
 

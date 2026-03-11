@@ -1,8 +1,9 @@
 from datetime import datetime
 from datetime import date
 from enum import Enum
+from typing import Any
 
-from sqlalchemy import Boolean, Date, DateTime, Enum as SqlEnum, Float, ForeignKey, Integer, String, func
+from sqlalchemy import JSON, Boolean, Date, DateTime, Enum as SqlEnum, Float, ForeignKey, Integer, String, func
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 
 from backend.database import Base
@@ -47,6 +48,10 @@ class AuditSession(Base):
     end_date: Mapped[date | None] = mapped_column(Date(), nullable=True)
     timezone: Mapped[str | None] = mapped_column(String(128), nullable=True)
     big_task_hours: Mapped[float | None] = mapped_column(Float(), nullable=True)
+    time_stats: Mapped[dict[str, Any] | None] = mapped_column(JSON(), nullable=True)
+    overlap_per_user: Mapped[dict[str, Any] | None] = mapped_column(JSON(), nullable=True)
+    small_tasks_per_user: Mapped[dict[str, Any] | None] = mapped_column(JSON(), nullable=True)
+    big_tasks_per_user: Mapped[dict[str, Any] | None] = mapped_column(JSON(), nullable=True)
     created_by_user_id: Mapped[int] = mapped_column(ForeignKey("users.id"), nullable=False, index=True)
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=False, server_default=func.now())
 

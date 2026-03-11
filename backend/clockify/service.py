@@ -63,6 +63,10 @@ async def execute_clockify_audit(
             end_date=end_date,
             timezone=timezone_name,
             big_task_hours=big_task_hours,
+            time_stats=results.get("time_stats"),
+            overlap_per_user=results.get("overlap_per_user"),
+            small_tasks_per_user=results.get("small_tasks_per_user"),
+            big_tasks_per_user=results.get("big_tasks_per_user"),
             created_by_user_id=created_by_user_id,
         )
     else:
@@ -76,6 +80,10 @@ async def execute_clockify_audit(
         audit_session.end_date = end_date
         audit_session.timezone = timezone_name
         audit_session.big_task_hours = big_task_hours
+        audit_session.time_stats = results.get("time_stats")
+        audit_session.overlap_per_user = results.get("overlap_per_user")
+        audit_session.small_tasks_per_user = results.get("small_tasks_per_user")
+        audit_session.big_tasks_per_user = results.get("big_tasks_per_user")
         if session_name is not None:
             audit_session.name = session_name or None
 

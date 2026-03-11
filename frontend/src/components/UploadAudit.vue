@@ -80,12 +80,6 @@
             <pre>{{ results.big_tasks_per_user }}</pre>
           </v-expansion-panel-text>
         </v-expansion-panel>
-        <v-expansion-panel>
-          <v-expansion-panel-title>Report By User By Date</v-expansion-panel-title>
-          <v-expansion-panel-text>
-            <pre>{{ results.report_by_user_by_date }}</pre>
-          </v-expansion-panel-text>
-        </v-expansion-panel>
       </v-expansion-panels>
 
       <v-divider class="my-4" />
