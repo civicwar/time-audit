@@ -5,6 +5,8 @@ from sqlalchemy import inspect, select
 from sqlalchemy.orm import Session
 
 from backend.auth import get_current_user, require_roles
+from backend.clockify.client import ClockifyClientError, ClockifyConfigurationError
+from backend.clockify.service import execute_clockify_audit
 from backend.database import engine, get_db
 from backend.models import AuditSession, Role, User
 from backend.schemas import AuditSessionRead, AuditSessionUpdate, UserCreate, UserRead, UserUpdate
@@ -112,6 +114,47 @@ async def update_audit_session(
     run_path = OUTPUT_DIR / session_record.run_dir
     report_files = manifest_for_run(run_path) if run_path.is_dir() else []
     return _serialize_audit_session(session_record, report_files)
+
+
+@router.post("/sessions/{session_id}/refresh")
+async def refresh_audit_session(
+    session_id: int,
+    db: Session = Depends(get_db),
+    _: User = Depends(require_roles(Role.ADMIN)),
+):
+    if not inspect(engine).has_table("audit_sessions"):
+        raise HTTPException(status_code=404, detail="Audit sessions are not available yet.")
+
+    session_record = db.execute(
+        select(AuditSession).where(AuditSession.id == session_id)
+    ).scalar_one_or_none()
+    if session_record is None:
+        raise HTTPException(status_code=404, detail="Audit session not found.")
+    if session_record.source_type != "clockify":
+        raise HTTPException(status_code=400, detail="Only Clockify sessions can be refreshed.")
+    if session_record.start_date is None or session_record.end_date is None or not session_record.timezone:
+        raise HTTPException(status_code=400, detail="Session query parameters are incomplete.")
+
+    try:
+        results, _ = await execute_clockify_audit(
+            db=db,
+            start_date=session_record.start_date,
+            end_date=session_record.end_date,
+            timezone_name=session_record.timezone,
+            big_task_hours=session_record.big_task_hours or 8.0,
+            session_name=session_record.name,
+            existing_session=session_record,
+        )
+    except ClockifyConfigurationError as exc:
+        raise HTTPException(status_code=status.HTTP_503_SERVICE_UNAVAILABLE, detail=str(exc)) from exc
+    except ClockifyClientError as exc:
+        raise HTTPException(status_code=status.HTTP_502_BAD_GATEWAY, detail=str(exc)) from exc
+    except RuntimeError as exc:
+        raise HTTPException(status_code=status.HTTP_500_INTERNAL_SERVER_ERROR, detail=str(exc)) from exc
+    except Exception as exc:
+        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail=f"Processing error: {exc}") from exc
+
+    return results
 
 
 @router.get("/reports/files/{relative_path:path}")

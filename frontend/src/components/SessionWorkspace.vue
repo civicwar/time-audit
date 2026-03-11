@@ -22,6 +22,33 @@
         <span v-if="clockifyProfile.user_name"> as {{ clockifyProfile.user_name }}</span>
       </div>
 
+      <div class="d-flex flex-wrap ga-2 mb-4">
+        <v-btn
+          variant="outlined"
+          size="small"
+          :disabled="loading || !clockifyConfigured"
+          @click="applyDatePreset('current-month')"
+        >
+          Current Month
+        </v-btn>
+        <v-btn
+          variant="outlined"
+          size="small"
+          :disabled="loading || !clockifyConfigured"
+          @click="applyDatePreset('last-week')"
+        >
+          Last Week
+        </v-btn>
+        <v-btn
+          variant="outlined"
+          size="small"
+          :disabled="loading || !clockifyConfigured"
+          @click="applyDatePreset('last-month')"
+        >
+          Last Month
+        </v-btn>
+      </div>
+
       <v-form @submit.prevent="submit">
         <v-row>
           <v-col cols="12" md="4">
@@ -146,11 +173,24 @@
     <v-alert v-if="runsError" type="error" variant="tonal" class="mb-4" :text="runsError" />
     <v-alert v-if="renameError" type="error" variant="tonal" class="mb-4" :text="renameError" />
     <v-alert v-if="deleteError" type="error" variant="tonal" class="mb-4" :text="deleteError" />
+    <v-alert v-if="refreshError" type="error" variant="tonal" class="mb-4" :text="refreshError" />
     <v-list v-if="recentRuns.length" lines="two">
       <v-list-item v-for="run in recentRuns" :key="run.id || run.run_dir">
-        <v-list-item-title>{{ run.name || run.run_dir }}</v-list-item-title>
+        <v-list-item-title>
+          <div class="d-flex align-center ga-2">
+            <v-btn
+              v-if="isAdmin && run.id"
+              icon="mdi-pencil-outline"
+              size="x-small"
+              variant="text"
+              @click="openRenameDialog(run)"
+            />
+            <span>{{ run.name || run.run_dir }}</span>
+          </div>
+        </v-list-item-title>
         <v-list-item-subtitle>
           <div>{{ run.run_dir }} • {{ run.report_files.length }} report files</div>
+          <div v-if="formatQuerySummary(run)">{{ formatQuerySummary(run) }}</div>
           <div v-if="run.created_by_username || run.created_at || run.clockify_workspace_name">
             <span v-if="run.created_by_username">Created by {{ run.created_by_username }}</span>
             <span v-if="run.created_by_username && run.clockify_workspace_name"> • </span>
@@ -161,15 +201,15 @@
         </v-list-item-subtitle>
         <template #append>
           <div v-if="isAdmin && run.id" class="d-flex align-center ga-2 mr-2">
-            <v-text-field
-              :model-value="renameDrafts[run.id] ?? run.name ?? ''"
-              label="Session Name"
-              density="compact"
-              variant="outlined"
-              hide-details
-              style="width: 220px"
-              @update:model-value="(value) => updateRenameDraft(run.id, value)"
-            />
+            <v-btn
+              color="primary"
+              variant="text"
+              :loading="refreshSavingId === run.id"
+              :disabled="!canRefreshRun(run)"
+              @click="refreshSession(run)"
+            >
+              Refresh
+            </v-btn>
             <v-btn
               color="secondary"
               variant="text"
@@ -192,6 +232,31 @@
       </v-list-item>
     </v-list>
     <div v-else class="text-body-2 text-medium-emphasis">No persisted sessions available yet.</div>
+
+    <v-dialog v-model="renameDialogOpen" max-width="460">
+      <v-card>
+        <v-card-title>Rename Session</v-card-title>
+        <v-card-text>
+          <v-text-field
+            v-model="renameDialogValue"
+            label="Session Name"
+            autofocus
+            @keyup.enter="submitRenameDialog"
+          />
+        </v-card-text>
+        <v-card-actions>
+          <v-spacer />
+          <v-btn variant="text" @click="closeRenameDialog">Cancel</v-btn>
+          <v-btn
+            color="primary"
+            :loading="renameSavingId === renameDialogSessionId"
+            @click="submitRenameDialog"
+          >
+            Save
+          </v-btn>
+        </v-card-actions>
+      </v-card>
+    </v-dialog>
   </v-card>
 </template>
 
@@ -209,8 +274,13 @@ const runsError = ref('')
 const renameError = ref('')
 const renameSavingId = ref(null)
 const renameDrafts = ref({})
+const renameDialogOpen = ref(false)
+const renameDialogSessionId = ref(null)
+const renameDialogValue = ref('')
 const deleteError = ref('')
 const deleteSavingId = ref(null)
+const refreshError = ref('')
+const refreshSavingId = ref(null)
 const clockifyError = ref('')
 const authSession = ref(getStoredSession())
 const clockifyProfile = ref({
@@ -221,7 +291,12 @@ const clockifyProfile = ref({
 })
 const sessionName = ref('')
 
-const formatDateInput = (date) => date.toISOString().slice(0, 10)
+const formatDateInput = (date) => {
+  const year = date.getFullYear()
+  const month = String(date.getMonth() + 1).padStart(2, '0')
+  const day = String(date.getDate()).padStart(2, '0')
+  return `${year}-${month}-${day}`
+}
 const today = new Date()
 const firstDayOfMonth = new Date(today.getFullYear(), today.getMonth(), 1)
 const fallbackTimezone = Intl.DateTimeFormat().resolvedOptions().timeZone || 'UTC'
@@ -248,6 +323,52 @@ const canSubmit = computed(() => {
   return isAdmin.value && clockifyConfigured.value && startDate.value && endDate.value && selectedTimezone.value
 })
 
+const startOfDay = (date) => new Date(date.getFullYear(), date.getMonth(), date.getDate())
+const monthNameFormatter = new Intl.DateTimeFormat('en', { month: 'long' })
+const shortDateFormatter = new Intl.DateTimeFormat('en', {
+  year: 'numeric',
+  month: 'short',
+  day: 'numeric',
+})
+
+const formatPresetRangeLabel = (start, end) => {
+  return `${shortDateFormatter.format(start)} - ${shortDateFormatter.format(end)}`
+}
+
+const applyDatePreset = (preset) => {
+  const baseToday = startOfDay(new Date())
+
+  if (preset === 'current-month') {
+    const start = new Date(baseToday.getFullYear(), baseToday.getMonth(), 1)
+    const end = new Date(baseToday.getFullYear(), baseToday.getMonth() + 1, 0)
+    startDate.value = formatDateInput(start)
+    endDate.value = formatDateInput(end)
+    sessionName.value = `${start.getFullYear()} ${monthNameFormatter.format(start)}`
+    return
+  }
+
+  if (preset === 'last-month') {
+    const start = new Date(baseToday.getFullYear(), baseToday.getMonth() - 1, 1)
+    const end = new Date(baseToday.getFullYear(), baseToday.getMonth(), 0)
+    startDate.value = formatDateInput(start)
+    endDate.value = formatDateInput(end)
+    sessionName.value = `${start.getFullYear()} ${monthNameFormatter.format(start)}`
+    return
+  }
+
+  if (preset === 'last-week') {
+    const currentWeekday = baseToday.getDay()
+    const daysSinceMonday = (currentWeekday + 6) % 7
+    const start = new Date(baseToday)
+    start.setDate(baseToday.getDate() - daysSinceMonday - 7)
+    const end = new Date(start)
+    end.setDate(start.getDate() + 6)
+    startDate.value = formatDateInput(start)
+    endDate.value = formatDateInput(end)
+    sessionName.value = `Last Week ${formatPresetRangeLabel(start, end)}`
+  }
+}
+
 const formatTimestamp = (value) => {
   if (!value) return ''
   const timestamp = new Date(value)
@@ -255,11 +376,42 @@ const formatTimestamp = (value) => {
   return timestamp.toLocaleString()
 }
 
+const formatQuerySummary = (run) => {
+  const parts = []
+  if (run.start_date && run.end_date) {
+    parts.push(`${run.start_date} to ${run.end_date}`)
+  } else if (run.start_date || run.end_date) {
+    parts.push(run.start_date || run.end_date)
+  }
+  if (run.timezone) {
+    parts.push(run.timezone)
+  }
+  if (run.big_task_hours !== null && run.big_task_hours !== undefined) {
+    parts.push(`Big tasks >= ${run.big_task_hours}h`)
+  }
+  return parts.join(' • ')
+}
+
+const canRefreshRun = (run) => Boolean(run.id && run.start_date && run.end_date && run.timezone)
+
 const updateRenameDraft = (sessionId, value) => {
   renameDrafts.value = {
     ...renameDrafts.value,
     [sessionId]: value,
   }
+}
+
+const openRenameDialog = (run) => {
+  if (!run.id) return
+  renameDialogSessionId.value = run.id
+  renameDialogValue.value = renameDrafts.value[run.id] ?? run.name ?? ''
+  renameDialogOpen.value = true
+}
+
+const closeRenameDialog = () => {
+  renameDialogOpen.value = false
+  renameDialogSessionId.value = null
+  renameDialogValue.value = ''
 }
 
 const loadClockifyProfile = async () => {
@@ -328,6 +480,18 @@ const saveSessionName = async (run) => {
   }
 }
 
+const submitRenameDialog = async () => {
+  if (!renameDialogSessionId.value) return
+  const run = recentRuns.value.find((item) => item.id === renameDialogSessionId.value)
+  if (!run) return
+
+  updateRenameDraft(run.id, renameDialogValue.value)
+  await saveSessionName(run)
+  if (!renameError.value) {
+    closeRenameDialog()
+  }
+}
+
 const deleteSession = async (run) => {
   if (!run.id) return
   deleteSavingId.value = run.id
@@ -342,6 +506,25 @@ const deleteSession = async (run) => {
     deleteError.value = requestError.response?.data?.detail || 'Could not delete session.'
   } finally {
     deleteSavingId.value = null
+  }
+}
+
+const refreshSession = async (run) => {
+  if (!run.id) return
+  refreshSavingId.value = run.id
+  refreshError.value = ''
+  error.value = ''
+  try {
+    const { data } = await api.post(`/api/in/sessions/${run.id}/refresh`)
+    results.value = data
+    if (data.session?.id) {
+      updateRenameDraft(data.session.id, run.name || '')
+    }
+    await loadRuns()
+  } catch (requestError) {
+    refreshError.value = requestError.response?.data?.detail || 'Could not refresh session.'
+  } finally {
+    refreshSavingId.value = null
   }
 }
 
