@@ -1,6 +1,6 @@
 from datetime import datetime, timezone
 
-from fastapi import APIRouter, Depends, HTTPException, status
+from fastapi import APIRouter, Depends, HTTPException, Query, status
 from sqlalchemy import inspect, select
 from sqlalchemy.orm import Session
 
@@ -10,7 +10,7 @@ from backend.clockify.service import execute_clockify_audit
 from backend.database import engine, get_db
 from backend.models import AuditSession, Role, User
 from backend.schemas import AuditSessionRead, AuditSessionUpdate, UserCreate, UserRead, UserUpdate
-from backend.public import OUTPUT_DIR, manifest_for_run, remove_run_directory
+from backend.public import OUTPUT_DIR, build_reports_zip_response, manifest_for_run, remove_run_directory
 from backend.security import get_password_hash
 
 
@@ -173,6 +173,34 @@ async def download_private_run_reports_zip(run_dir: str):
     from backend.public import download_run_reports_zip
 
     return await download_run_reports_zip(run_dir)
+
+
+@router.get("/reports/{run_dir}/selected-zip")
+async def download_private_selected_reports_zip(
+    run_dir: str,
+    users: list[str] = Query(..., min_length=1),
+):
+    if "/" in run_dir or ".." in run_dir:
+        raise HTTPException(status_code=400, detail="Invalid run directory")
+
+    run_path = OUTPUT_DIR / run_dir
+    if not run_path.is_dir():
+        raise HTTPException(status_code=404, detail="Run directory not found")
+
+    requested_users = {user.strip() for user in users if user.strip()}
+    if not requested_users:
+        raise HTTPException(status_code=400, detail="At least one user must be selected")
+
+    selected_report_names = [
+        report["filename"]
+        for report in manifest_for_run(run_path)
+        if report.get("user") in requested_users and report.get("filename")
+    ]
+    if not selected_report_names:
+        raise HTTPException(status_code=404, detail="No matching reports found for the selected users")
+
+    archive_name = f"{run_dir}_selected_reports.zip"
+    return build_reports_zip_response(run_path, sorted(selected_report_names), archive_name)
 
 
 @router.get("/users", response_model=list[UserRead])

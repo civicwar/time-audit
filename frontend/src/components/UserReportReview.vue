@@ -22,21 +22,24 @@
 
     <div v-if="!loading && !error">
       <div class="d-flex flex-wrap align-center ga-3 mb-3">
-        <v-select
-          v-model="selectedUser"
-          :items="userOptions"
-          label="User"
+        <v-btn-toggle
+          v-model="viewMode"
+          color="primary"
           density="comfortable"
-          hide-details
-          style="max-width: 320px"
-        />
+          mandatory
+        >
+          <v-btn value="calendar">Calendar</v-btn>
+          <v-btn value="list">List</v-btn>
+        </v-btn-toggle>
         <v-switch
-          v-model="groupByDate"
+          v-if="viewMode === 'list'"
+          v-model="listGroupByDate"
           color="primary"
           hide-details
           label="Group by date"
         />
         <v-btn
+          v-if="showSelectedDownloadButton"
           color="primary"
           variant="outlined"
           :disabled="!canDownloadSelectedReport"
@@ -54,29 +57,28 @@
         </v-btn>
         <div class="text-body-2">Total Entries: {{ filteredRows.length }}</div>
       </div>
-      <div v-if="groupByDate">
-        <div class="calendar-legend mb-4">
-          <div class="d-flex align-center justify-space-between mb-2">
-            <div class="text-subtitle-2">Legend</div>
-            <v-btn v-if="activeLegendUsers.length || selectedDayKey" variant="text" size="small" @click="clearCalendarFilters">
-              Clear filters
-            </v-btn>
-          </div>
-          <div class="d-flex flex-wrap ga-2">
-            <button
-              v-for="user in legendUsers"
-              :key="user"
-              type="button"
-              class="calendar-legend__item"
-              :class="{ 'calendar-legend__item--active': isLegendUserActive(user) }"
-              @click="toggleLegendUser(user)"
-            >
-              <span class="calendar-legend__swatch" :style="entryStyle(user)" />
-              <span class="text-body-2">{{ user }}</span>
-            </button>
-          </div>
+      <div class="calendar-legend mb-4">
+        <div class="d-flex align-center justify-space-between mb-2">
+          <div class="text-subtitle-2">Legend</div>
+          <v-btn v-if="activeLegendUsers.length" variant="text" size="small" @click="clearCalendarFilters">
+            Clear filters
+          </v-btn>
         </div>
-
+        <div class="d-flex flex-wrap ga-2">
+          <button
+            v-for="user in legendUsers"
+            :key="user"
+            type="button"
+            class="calendar-legend__item"
+            :class="{ 'calendar-legend__item--active': isLegendUserActive(user) }"
+            @click="toggleLegendUser(user)"
+          >
+            <span class="calendar-legend__swatch" :style="entryStyle(user)" />
+            <span class="text-body-2">{{ user }}</span>
+          </button>
+        </div>
+      </div>
+      <div v-if="viewMode === 'calendar'">
         <div
           v-for="month in calendarMonths"
           :key="month.key"
@@ -133,34 +135,15 @@
             </div>
           </div>
         </div>
-
         <div class="d-flex align-center justify-space-between mb-2">
-          <h3 class="text-subtitle-1">
-            {{ selectedDayLabel ? `Entries for ${selectedDayLabel}` : 'All Calendar Entries' }}
-          </h3>
-          <div class="text-body-2 text-medium-emphasis">{{ filteredRows.length }} entries</div>
+          <div class="text-body-2 text-medium-emphasis">
+            Click a day to open its entries.
+          </div>
+          <div class="text-body-2 text-medium-emphasis">{{ filteredRows.length }} matching entries</div>
         </div>
-        <v-data-table
-          :headers="headers"
-          :items="filteredRows"
-          density="comfortable"
-          item-value="id"
-          :sort-by="[{ key: 'date', order: 'asc' }, { key: 'user', order: 'asc' }]"
-        >
-          <template #item.description="{ item }">
-            <button
-              type="button"
-              class="task-description-button"
-              :title="item.description"
-              @click="openTaskDialog(item)"
-            >
-              {{ truncateDescription(item.description) }}
-            </button>
-          </template>
-        </v-data-table>
       </div>
       <v-data-table
-        v-else
+        v-else-if="!listGroupByDate"
         :headers="headers"
         :items="filteredRows"
         density="comfortable"
@@ -178,6 +161,36 @@
           </button>
         </template>
       </v-data-table>
+      <v-expansion-panels v-else multiple>
+        <v-expansion-panel
+          v-for="group in listDateGroups"
+          :key="group.date"
+        >
+          <v-expansion-panel-title>
+            {{ group.date }} ({{ group.items.length }})
+          </v-expansion-panel-title>
+          <v-expansion-panel-text>
+            <v-data-table
+              :headers="groupedHeaders"
+              :items="group.items"
+              density="comfortable"
+              item-value="id"
+              :sort-by="[{ key: 'user', order: 'asc' }, { key: 'duration', order: 'desc' }]"
+            >
+              <template #item.description="{ item }">
+                <button
+                  type="button"
+                  class="task-description-button"
+                  :title="item.description"
+                  @click="openTaskDialog(item)"
+                >
+                  {{ truncateDescription(item.description) }}
+                </button>
+              </template>
+            </v-data-table>
+          </v-expansion-panel-text>
+        </v-expansion-panel>
+      </v-expansion-panels>
     </div>
 
     <v-dialog v-model="taskDialogOpen" max-width="720">
@@ -192,6 +205,36 @@
         <v-card-actions>
           <v-spacer />
           <v-btn variant="text" @click="closeTaskDialog">Close</v-btn>
+        </v-card-actions>
+      </v-card>
+    </v-dialog>
+
+    <v-dialog v-model="dayDialogOpen" max-width="960">
+      <v-card>
+        <v-card-title>{{ dayDialogTitle }}</v-card-title>
+        <v-card-text>
+          <v-data-table
+            :headers="headers"
+            :items="selectedDayItems"
+            density="comfortable"
+            item-value="id"
+            :sort-by="[{ key: 'user', order: 'asc' }, { key: 'duration', order: 'desc' }]"
+          >
+            <template #item.description="{ item }">
+              <button
+                type="button"
+                class="task-description-button"
+                :title="item.description"
+                @click="openTaskDialog(item)"
+              >
+                {{ truncateDescription(item.description) }}
+              </button>
+            </template>
+          </v-data-table>
+        </v-card-text>
+        <v-card-actions>
+          <v-spacer />
+          <v-btn variant="text" @click="closeDayDialog">Close</v-btn>
         </v-card-actions>
       </v-card>
     </v-dialog>
@@ -218,10 +261,12 @@ const loading = ref(false)
 const error = ref('')
 const rows = ref([])
 const reportFiles = ref([])
-const selectedUser = ref('All users')
-const groupByDate = ref(true)
+const viewMode = ref('calendar')
+const listGroupByDate = ref(false)
 const activeLegendUsers = ref([])
 const selectedDayKey = ref('')
+const selectedDayItems = ref([])
+const dayDialogOpen = ref(false)
 const taskDialogOpen = ref(false)
 const selectedTask = ref(null)
 const backHref = '/in'
@@ -229,6 +274,13 @@ const backHref = '/in'
 const headers = [
   { title: 'User', key: 'user' },
   { title: 'Date', key: 'date' },
+  { title: 'Task', key: 'description' },
+  { title: 'Duration (h)', key: 'duration' },
+  { title: 'Duration', key: 'duration_hm' },
+]
+
+const groupedHeaders = [
+  { title: 'User', key: 'user' },
   { title: 'Task', key: 'description' },
   { title: 'Duration (h)', key: 'duration' },
   { title: 'Duration', key: 'duration_hm' },
@@ -251,11 +303,6 @@ const userColorPalette = [
   { background: '#0969da22', border: '#0969da', text: '#b8d8ff' },
   { background: '#2da44e22', border: '#2da44e', text: '#c0f1cf' },
 ]
-
-const userOptions = computed(() => {
-  const users = Array.from(new Set(rows.value.map((r) => r.user))).sort()
-  return ['All users', ...users]
-})
 
 const parseReportDate = (value) => {
   if (!value) return null
@@ -284,10 +331,7 @@ const toCalendarKey = (date) => {
   ].join('-')
 }
 
-const userFilteredRows = computed(() => {
-  if (selectedUser.value === 'All users') return rows.value
-  return rows.value.filter((r) => r.user === selectedUser.value)
-})
+const userFilteredRows = computed(() => rows.value)
 
 const calendarRows = computed(() => {
   if (!activeLegendUsers.value.length) {
@@ -297,27 +341,32 @@ const calendarRows = computed(() => {
 })
 
 const filteredRows = computed(() => {
-  if (!selectedDayKey.value) {
-    return calendarRows.value
-  }
-  return calendarRows.value.filter((row) => {
-    const parsedDate = parseReportDate(row.date)
-    return parsedDate && toCalendarKey(parsedDate) === selectedDayKey.value
-  })
+  return calendarRows.value
+})
+
+const selectedReportUsers = computed(() => {
+  return activeLegendUsers.value.filter((user) => reportFiles.value.some((rf) => rf.user === user))
 })
 
 const selectedReportFile = computed(() => {
-  if (selectedUser.value === 'All users') return null
-  return reportFiles.value.find((rf) => rf.user === selectedUser.value) || null
+  if (selectedReportUsers.value.length !== 1) return null
+  return reportFiles.value.find((rf) => rf.user === selectedReportUsers.value[0]) || null
 })
 
-const canDownloadSelectedReport = computed(() => Boolean(selectedReportFile.value?.relative_path))
+const canDownloadSelectedReport = computed(() => selectedReportUsers.value.length > 0)
+
+const allLegendUsersSelected = computed(() => {
+  return legendUsers.value.length > 0 && selectedReportUsers.value.length === legendUsers.value.length
+})
+
+const showSelectedDownloadButton = computed(() => !allLegendUsersSelected.value)
 
 const canDownloadAllReportsZip = computed(() => Boolean(runDir.value && reportFiles.value.length))
 
 const downloadSelectedButtonText = computed(() => {
-  if (selectedUser.value === 'All users') return 'Select a user to download report.json'
-  return `Download ${selectedUser.value} report.json`
+  if (!selectedReportUsers.value.length) return 'Select one or more legend users to download reports'
+  if (selectedReportUsers.value.length === 1) return `Download ${selectedReportUsers.value[0]} report.json`
+  return `Download ${selectedReportUsers.value.length} selected reports.zip`
 })
 
 const dateGroups = computed(() => {
@@ -343,6 +392,28 @@ const dateGroups = computed(() => {
     }))
 })
 
+const listDateGroups = computed(() => {
+  const grouped = filteredRows.value.reduce((acc, row) => {
+    if (!acc[row.date]) acc[row.date] = []
+    acc[row.date].push(row)
+    return acc
+  }, {})
+
+  return Object.keys(grouped)
+    .sort((left, right) => {
+      const leftDate = parseReportDate(left)
+      const rightDate = parseReportDate(right)
+      if (!leftDate && !rightDate) return String(left).localeCompare(String(right))
+      if (!leftDate) return 1
+      if (!rightDate) return -1
+      return leftDate.getTime() - rightDate.getTime()
+    })
+    .map((date) => ({
+      date,
+      items: grouped[date],
+    }))
+})
+
 const legendUsers = computed(() => {
   return Array.from(new Set(userFilteredRows.value.map((row) => row.user))).sort()
 })
@@ -352,6 +423,10 @@ const selectedDayLabel = computed(() => {
   const parsed = parseReportDate(selectedDayKey.value)
   if (!parsed) return selectedDayKey.value
   return parsed.toLocaleDateString()
+})
+
+const dayDialogTitle = computed(() => {
+  return selectedDayLabel.value ? `Entries for ${selectedDayLabel.value}` : 'Entries'
 })
 
 const colorByUser = computed(() => {
@@ -381,12 +456,13 @@ const toggleLegendUser = (user) => {
 
 const selectCalendarDay = (day) => {
   if (!day.items.length) return
-  selectedDayKey.value = selectedDayKey.value === day.key ? '' : day.key
+  selectedDayKey.value = day.key
+  selectedDayItems.value = day.items
+  dayDialogOpen.value = true
 }
 
 const clearCalendarFilters = () => {
   activeLegendUsers.value = []
-  selectedDayKey.value = ''
 }
 
 const truncateDescription = (value, maxLength = 48) => {
@@ -402,6 +478,12 @@ const openTaskDialog = (item) => {
 const closeTaskDialog = () => {
   taskDialogOpen.value = false
   selectedTask.value = null
+}
+
+const closeDayDialog = () => {
+  dayDialogOpen.value = false
+  selectedDayKey.value = ''
+  selectedDayItems.value = []
 }
 
 const calendarMonths = computed(() => {
@@ -510,10 +592,8 @@ const loadReport = async () => {
     rows.value = flatRows
     activeLegendUsers.value = []
     selectedDayKey.value = ''
-    if (props.user && userOptions.value.includes(props.user)) {
-      selectedUser.value = props.user
-    } else {
-      selectedUser.value = 'All users'
+    if (props.user) {
+      activeLegendUsers.value = flatRows.some((row) => row.user === props.user) ? [props.user] : []
     }
   } catch (e) {
     error.value = e.response?.data?.detail || 'Could not load run reports.'
@@ -523,21 +603,28 @@ const loadReport = async () => {
 }
 
 const downloadSelectedReport = async () => {
-  if (!selectedReportFile.value) return
+  if (!selectedReportUsers.value.length) return
   try {
-    const response = await api.get(`/api/in/reports/files/${selectedReportFile.value.relative_path}`, {
-      responseType: 'blob',
-    })
+    const response = selectedReportUsers.value.length === 1
+      ? await api.get(`/api/in/reports/files/${selectedReportFile.value.relative_path}`, {
+          responseType: 'blob',
+        })
+      : await api.get(`/api/in/reports/${runDir.value}/selected-zip`, {
+          params: new URLSearchParams(selectedReportUsers.value.map((user) => ['users', user])),
+          responseType: 'blob',
+        })
     const blobUrl = window.URL.createObjectURL(response.data)
     const link = document.createElement('a')
     link.href = blobUrl
-    link.download = `${selectedUser.value.replace(/\s+/g, '_').toLowerCase()}_report.json`
+    link.download = selectedReportUsers.value.length === 1
+      ? `${selectedReportUsers.value[0].replace(/\s+/g, '_').toLowerCase()}_report.json`
+      : `${runDir.value}_selected_reports.zip`
     document.body.appendChild(link)
     link.click()
     document.body.removeChild(link)
     window.URL.revokeObjectURL(blobUrl)
   } catch (e) {
-    error.value = e.response?.data?.detail || 'Could not download selected report.'
+    error.value = e.response?.data?.detail || 'Could not download selected reports.'
   }
 }
 

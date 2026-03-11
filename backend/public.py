@@ -58,6 +58,23 @@ def remove_run_directory(run_dir: str) -> None:
         shutil.rmtree(run_path)
 
 
+def build_reports_zip_response(run_path: Path, report_names: list[str], archive_name: str) -> Response:
+    if not report_names:
+        raise HTTPException(status_code=404, detail="No reports found for this run")
+
+    zip_buffer = io.BytesIO()
+    with zipfile.ZipFile(zip_buffer, mode="w", compression=zipfile.ZIP_DEFLATED) as archive:
+        for name in report_names:
+            archive.write(run_path / name, arcname=name)
+
+    zip_buffer.seek(0)
+    return Response(
+        content=zip_buffer.getvalue(),
+        media_type="application/zip",
+        headers={"Content-Disposition": f'attachment; filename="{archive_name}"'},
+    )
+
+
 @router.post("/api/audit")
 async def audit_csv(
     file: UploadFile = File(...),
@@ -104,20 +121,7 @@ async def download_run_reports_zip(run_dir: str):
     report_names = [
         name for name in sorted(os.listdir(run_path)) if name.endswith("_report.json")
     ]
-    if not report_names:
-        raise HTTPException(status_code=404, detail="No reports found for this run")
-
-    zip_buffer = io.BytesIO()
-    with zipfile.ZipFile(zip_buffer, mode="w", compression=zipfile.ZIP_DEFLATED) as archive:
-        for name in report_names:
-            archive.write(run_path / name, arcname=name)
-
-    zip_buffer.seek(0)
-    return Response(
-        content=zip_buffer.getvalue(),
-        media_type="application/zip",
-        headers={"Content-Disposition": f'attachment; filename="{run_dir}_reports.zip"'},
-    )
+    return build_reports_zip_response(run_path, report_names, f"{run_dir}_reports.zip")
 
 
 @router.get("/api/reports/files/{relative_path:path}")
