@@ -127,19 +127,16 @@ def generate_time_audit(
         .to_dict()["Duration (decimal)"]
     )
 
-    grouping_by_user_by_date = (
-        data_new.groupby(["User", "Start Date", "Description"])
-        .agg({"Duration (decimal)": "sum"})
-        .reset_index()
-    )
-
     report_by_user_by_date = {}
-    for _, row in grouping_by_user_by_date.iterrows():
+    report_rows = data_new.sort_values(["User", "Start Datetime", "End Datetime", "Description"])
+    for _, row in report_rows.iterrows():
         user = row["User"]
         date = row["Start Date"]
         description = row["Description"]
         duration_decimal = row["Duration (decimal)"]
         duration_hm = convert_decimal_to_hm(duration_decimal)
+        start_datetime = row["Start Datetime"]
+        end_datetime = row["End Datetime"]
 
         if user not in report_by_user_by_date:
             report_by_user_by_date[user] = {}
@@ -151,11 +148,15 @@ def generate_time_audit(
                 "description": description,
                 "duration": duration_decimal,
                 "duration_hm": duration_hm,
+                "start_time": start_datetime.strftime("%H:%M:%S"),
+                "end_time": end_datetime.strftime("%H:%M:%S"),
+                "start_datetime": start_datetime.strftime("%Y-%m-%d %H:%M:%S"),
+                "end_datetime": end_datetime.strftime("%Y-%m-%d %H:%M:%S"),
+                "end_date": row["End Date"],
             }
         )
 
     report_files: List[Dict[str, str]] = []
-    run_dir_name: Optional[str] = None
     if write_reports:
         if output_dir is None:
             output_dir = "output"
