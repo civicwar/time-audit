@@ -3,7 +3,7 @@ from datetime import date
 from enum import Enum
 from typing import Any
 
-from sqlalchemy import JSON, Boolean, Date, DateTime, Enum as SqlEnum, Float, ForeignKey, Integer, String, func
+from sqlalchemy import JSON, Boolean, Date, DateTime, Enum as SqlEnum, Float, ForeignKey, Integer, String, Text, func
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 
 from backend.database import Base
@@ -56,3 +56,27 @@ class AuditSession(Base):
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=False, server_default=func.now())
 
     created_by: Mapped[User] = relationship(back_populates="audit_sessions")
+    time_entries: Mapped[list["AuditSessionTimeEntry"]] = relationship(
+        back_populates="audit_session",
+        cascade="all, delete-orphan",
+        passive_deletes=True,
+        order_by="AuditSessionTimeEntry.start_datetime",
+    )
+
+
+class AuditSessionTimeEntry(Base):
+    __tablename__ = "audit_session_time_entries"
+
+    id: Mapped[int] = mapped_column(Integer, primary_key=True, index=True)
+    audit_session_id: Mapped[int] = mapped_column(
+        ForeignKey("audit_sessions.id", ondelete="CASCADE"),
+        nullable=False,
+        index=True,
+    )
+    user_name: Mapped[str] = mapped_column(String(255), nullable=False, index=True)
+    description: Mapped[str] = mapped_column(Text(), nullable=False, default="", server_default="")
+    start_datetime: Mapped[datetime] = mapped_column(DateTime(), nullable=False, index=True)
+    end_datetime: Mapped[datetime] = mapped_column(DateTime(), nullable=False)
+    duration_hours: Mapped[float] = mapped_column(Float(), nullable=False)
+
+    audit_session: Mapped[AuditSession] = relationship(back_populates="time_entries")
