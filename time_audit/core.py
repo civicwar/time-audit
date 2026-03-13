@@ -18,6 +18,7 @@ def generate_time_audit(
     csv_content: str,
     big_task_hours: float = 8.0,
     output_dir: Optional[str] = None,
+    run_dir_name: Optional[str] = None,
     write_reports: bool = True,
     clean_output_dir: bool = False,  # deprecated: retained for compatibility, ignored in favor of per-request subdirs
     retention_hours: int = 24,
@@ -29,6 +30,7 @@ def generate_time_audit(
     csv_content: Raw CSV string exported from Clockify detailed report (with the same columns expected previously).
     big_task_hours: Threshold above which a task is considered very big.
     output_dir: Directory to write per-user JSON reports. Used only if write_reports is True.
+    run_dir_name: Optional explicit run directory name to reuse when writing reports.
     write_reports: Whether to write JSON report files. If False, function only returns structures.
     clean_output_dir: (Deprecated) Ignored; previous behavior replaced with per-request subdirectories for isolation.
     retention_hours: Number of hours to retain past run directories. Directories older than this will be deleted.
@@ -176,10 +178,13 @@ def generate_time_audit(
                     except OSError:
                         pass
 
-        # Create per-request subdirectory
-        ts = now.strftime("%Y%m%dT%H%M%SZ")
-        run_dir_name = f"{ts}_{uuid.uuid4().hex[:6]}"
+        # Create or reuse the per-request subdirectory.
+        if run_dir_name is None:
+            ts = now.strftime("%Y%m%dT%H%M%SZ")
+            run_dir_name = f"{ts}_{uuid.uuid4().hex[:6]}"
         run_dir_path = os.path.join(output_dir, run_dir_name)
+        if os.path.isdir(run_dir_path):
+            shutil.rmtree(run_dir_path)
         os.makedirs(run_dir_path, exist_ok=True)
 
         for user, data in report_by_user_by_date.items():

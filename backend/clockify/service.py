@@ -4,7 +4,6 @@ from sqlalchemy.orm import Session
 
 from backend.clockify.client import ClockifyClient, ClockifyClientError, ClockifyConfigurationError
 from backend.models import AuditSession
-from backend.public import remove_run_directory
 from time_audit import generate_time_audit
 
 
@@ -40,6 +39,7 @@ async def execute_clockify_audit(
         csv_content=csv_content,
         big_task_hours=big_task_hours,
         output_dir="output",
+        run_dir_name=existing_session.run_dir if existing_session is not None else None,
         write_reports=True,
         retention_hours=24,
     )
@@ -48,7 +48,6 @@ async def execute_clockify_audit(
     if not run_dir:
         raise RuntimeError("Audit completed without a run directory.")
 
-    previous_run_dir = None
     if existing_session is None:
         if created_by_user_id is None:
             raise RuntimeError("A creator is required when persisting a new session.")
@@ -71,7 +70,6 @@ async def execute_clockify_audit(
         )
     else:
         audit_session = existing_session
-        previous_run_dir = existing_session.run_dir
         audit_session.run_dir = run_dir
         audit_session.source_type = "clockify"
         audit_session.clockify_workspace_id = profile.workspace_id
@@ -90,9 +88,6 @@ async def execute_clockify_audit(
     db.add(audit_session)
     db.commit()
     db.refresh(audit_session)
-
-    if previous_run_dir and previous_run_dir != audit_session.run_dir:
-        remove_run_directory(previous_run_dir)
 
     results["session"] = serialize_session_reference(audit_session)
     return results, audit_session

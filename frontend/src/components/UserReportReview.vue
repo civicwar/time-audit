@@ -2,7 +2,18 @@
   <v-card elevation="2" class="pa-4">
     <div class="d-flex align-center justify-space-between mb-4">
       <h2 class="text-h6">User Report Review</h2>
-      <v-btn color="primary" variant="text" :href="backHref">Back</v-btn>
+      <div class="d-flex align-center ga-2">
+        <v-btn
+          v-if="isAdmin && currentRun && canRefreshCurrentRun"
+          color="primary"
+          variant="text"
+          :loading="refreshLoading"
+          @click="refreshCurrentSession"
+        >
+          Refresh
+        </v-btn>
+        <v-btn color="primary" variant="text" :href="backHref">Back</v-btn>
+      </div>
     </div>
 
     <v-alert
@@ -93,10 +104,14 @@
       </div>
       <div v-if="viewMode === 'calendar'">
         <div v-if="calendarMode !== 'month'" class="d-flex flex-wrap align-center justify-end ga-2 mb-4">
-            <v-btn variant="text" @click="shiftCalendarPeriod(-1)">Previous</v-btn>
-            <v-btn variant="text" @click="jumpCalendarToToday">Today</v-btn>
-            <div class="text-body-2 text-medium-emphasis">{{ calendarPeriodLabel }}</div>
-            <v-btn variant="text" @click="shiftCalendarPeriod(1)">Next</v-btn>
+            <div class="text-body-2 text-medium-emphasis me-auto">{{ calendarPeriodLabel }}</div>
+          <v-btn icon="mdi-chevron-left" variant="text" @click="shiftCalendarPeriod(-1)" />
+            <v-tooltip v-if="showTodayShortcut" text="Today" location="top">
+              <template #activator="{ props: tooltipProps }">
+                <v-btn v-bind="tooltipProps" icon="mdi-calendar-today" variant="text" @click="jumpCalendarToToday" />
+              </template>
+            </v-tooltip>
+          <v-btn icon="mdi-chevron-right" variant="text" @click="shiftCalendarPeriod(1)" />
         </div>
 
         <template v-if="calendarMode === 'month'">
@@ -124,6 +139,7 @@
                 :class="{
                   'calendar-day--outside': !day.inCurrentMonth,
                   'calendar-day--empty': !day.items.length,
+                  'calendar-day--today': isTodayKey(day.key),
                   'calendar-day--selected': selectedDayKey === day.key,
                   'calendar-day--clickable': day.items.length,
                 }"
@@ -177,6 +193,7 @@
                   v-for="column in weekCalendarColumns"
                   :key="column.key"
                   class="time-calendar__column-header"
+                  :class="{ 'time-calendar__column-header--today': isTodayKey(column.key) }"
                 >
                   <div class="text-caption text-medium-emphasis">{{ column.weekdayLabel }}</div>
                   <div class="text-subtitle-2">{{ column.label }}</div>
@@ -200,6 +217,7 @@
                   v-for="column in weekCalendarColumns"
                   :key="column.key"
                   class="time-calendar__column"
+                  :class="{ 'time-calendar__column--today': isTodayKey(column.key) }"
                   :style="{ height: `${weekCalendarHeight}px` }"
                 >
                   <div
@@ -425,7 +443,7 @@
 <script setup>
 import { computed, onMounted, ref, watch } from 'vue'
 
-import api from '../services/api'
+import api, { getStoredSession } from '../services/api'
 
 const props = defineProps({
   reportPath: {
@@ -440,8 +458,11 @@ const props = defineProps({
 
 const loading = ref(false)
 const error = ref('')
+const authSession = ref(getStoredSession())
 const rows = ref([])
 const reportFiles = ref([])
+const currentRun = ref(null)
+const refreshLoading = ref(false)
 const viewMode = ref('calendar')
 const calendarMode = ref('month')
 const listGroupByDate = ref(false)
@@ -472,6 +493,13 @@ const groupedHeaders = [
 const runDir = computed(() => {
   const [dir] = (props.reportPath || '').split('/')
   return dir || ''
+})
+
+const isAdmin = computed(() => authSession.value?.user?.role === 'Admin')
+
+const canRefreshCurrentRun = computed(() => {
+  const run = currentRun.value
+  return Boolean(run?.id && run?.start_date && run?.end_date && run?.timezone)
 })
 
 const weekdayLabels = ['Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat', 'Sun']
@@ -525,6 +553,8 @@ const toCalendarKey = (date) => {
     String(date.getDate()).padStart(2, '0'),
   ].join('-')
 }
+
+const todayKey = toCalendarKey(new Date())
 
 const parseReportDateTime = (value) => {
   if (!value) return null
@@ -734,6 +764,22 @@ const legendUsers = computed(() => {
   return Array.from(new Set(userFilteredRows.value.map((row) => row.user))).sort()
 })
 
+const showTodayShortcut = computed(() => {
+  if (!rows.value.length) return false
+
+  const today = new Date()
+  const currentMonth = today.getMonth()
+  const currentYear = today.getFullYear()
+
+  const parsedDates = rows.value
+    .map((row) => row.startDateTime || parseReportDate(row.date))
+    .filter(Boolean)
+
+  if (!parsedDates.length) return false
+
+  return parsedDates.every((date) => date.getFullYear() === currentYear && date.getMonth() === currentMonth)
+})
+
 const availableDateKeys = computed(() => {
   return Array.from(
     new Set(
@@ -778,6 +824,8 @@ const entryStyle = (user) => {
     color: palette.text,
   }
 }
+
+const isTodayKey = (key) => key === todayKey
 
 const isLegendUserActive = (user) => {
   return activeLegendUsers.value.includes(user)
@@ -1150,9 +1198,37 @@ const downloadAllReportsZip = async () => {
   }
 }
 
+const loadCurrentRun = async () => {
+  currentRun.value = null
+  if (!isAdmin.value || !runDir.value) return
+
+  try {
+    const { data } = await api.get('/api/in/runs')
+    currentRun.value = (data.items || []).find((item) => item.run_dir === runDir.value) || null
+  } catch {
+    currentRun.value = null
+  }
+}
+
+const refreshCurrentSession = async () => {
+  if (!canRefreshCurrentRun.value) return
+
+  refreshLoading.value = true
+  error.value = ''
+  try {
+    await api.post(`/api/in/sessions/${currentRun.value.id}/refresh`)
+    await Promise.all([loadCurrentRun(), loadReport()])
+  } catch (requestError) {
+    error.value = requestError.response?.data?.detail || 'Could not refresh session.'
+  } finally {
+    refreshLoading.value = false
+  }
+}
+
 onMounted(loadReport)
 watch(() => props.reportPath, loadReport)
 watch(filteredRows, syncFocusedDate)
+watch(runDir, loadCurrentRun, { immediate: true })
 </script>
 
 <style scoped>
@@ -1185,6 +1261,11 @@ watch(filteredRows, syncFocusedDate)
 .calendar-day--selected {
   border-color: rgba(31, 111, 235, 0.8);
   box-shadow: inset 0 0 0 1px rgba(31, 111, 235, 0.45);
+}
+
+.calendar-day--today {
+  border-color: rgba(210, 153, 34, 0.9);
+  box-shadow: inset 0 0 0 1px rgba(210, 153, 34, 0.45);
 }
 
 .calendar-day--outside {
@@ -1364,6 +1445,11 @@ watch(filteredRows, syncFocusedDate)
   border-bottom: 1px solid rgba(255, 255, 255, 0.08);
 }
 
+.time-calendar__column-header--today {
+  background: rgba(210, 153, 34, 0.12);
+  border-radius: 10px 10px 0 0;
+}
+
 .time-calendar__times {
   position: relative;
 }
@@ -1384,6 +1470,11 @@ watch(filteredRows, syncFocusedDate)
   background:
     linear-gradient(to bottom, rgba(255, 255, 255, 0.03), rgba(255, 255, 255, 0.01));
   overflow: hidden;
+}
+
+.time-calendar__column--today {
+  background:
+    linear-gradient(to bottom, rgba(210, 153, 34, 0.12), rgba(210, 153, 34, 0.04));
 }
 
 .time-calendar__hour-line {
