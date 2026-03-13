@@ -1,20 +1,13 @@
 <template>
   <v-card elevation="2" class="pa-4">
-    <div class="d-flex align-center justify-space-between mb-4">
-      <h2 class="text-h6">User Report Review</h2>
-      <div class="d-flex align-center ga-2">
-        <v-btn
-          v-if="isAdmin && currentRun && canRefreshCurrentRun"
-          color="primary"
-          variant="text"
-          :loading="refreshLoading"
-          @click="refreshCurrentSession"
-        >
-          Refresh
-        </v-btn>
-        <v-btn color="primary" variant="text" :href="backHref">Back</v-btn>
-      </div>
-    </div>
+    <report-review-header
+      :is-admin="isAdmin"
+      :current-run="currentRun"
+      :can-refresh-current-run="canRefreshCurrentRun"
+      :refresh-loading="refreshLoading"
+      :back-href="backHref"
+      @refresh="refreshCurrentSession"
+    />
 
     <v-alert
       v-if="error"
@@ -68,271 +61,78 @@
         </v-btn>
         <div class="text-body-2">Total Entries: {{ filteredRows.length }}</div>
       </div>
-      <div class="calendar-legend mb-4">
-        <div class="d-flex align-center justify-space-between mb-2">
-          <div class="text-subtitle-2">Legend</div>
-          <div class="d-flex flex-wrap align-center justify-end ga-2">
-            <v-btn-toggle
-              v-if="viewMode === 'calendar'"
-              v-model="calendarMode"
-              color="primary"
-              density="comfortable"
-              mandatory
-            >
-              <v-btn value="month">Monthly</v-btn>
-              <v-btn value="week">Weekly</v-btn>
-              <v-btn value="day">Daily</v-btn>
-            </v-btn-toggle>
-            <v-btn v-if="activeLegendUsers.length" variant="text" size="small" @click="clearCalendarFilters">
-              Clear filters
-            </v-btn>
-          </div>
-        </div>
-        <div class="d-flex flex-wrap ga-2">
-          <button
-            v-for="user in legendUsers"
-            :key="user"
-            type="button"
-            class="calendar-legend__item"
-            :class="{ 'calendar-legend__item--active': isLegendUserActive(user) }"
-            @click="toggleLegendUser(user)"
-          >
-            <span class="calendar-legend__swatch" :style="entryStyle(user)" />
-            <span class="text-body-2">{{ user }}</span>
-          </button>
-        </div>
-      </div>
+
+      <calendar-legend
+        :legend-users="legendUsers"
+        :active-legend-users="activeLegendUsers"
+        :view-mode="viewMode"
+        :calendar-mode="calendarMode"
+        :entry-style="entryStyle"
+        @update:calendar-mode="calendarMode = $event"
+        @toggle-user="toggleLegendUser"
+        @clear-filters="clearCalendarFilters"
+      />
+
       <div v-if="viewMode === 'calendar'">
         <div v-if="calendarMode !== 'month'" class="d-flex flex-wrap align-center justify-end ga-2 mb-4">
-            <div class="text-body-2 text-medium-emphasis me-auto">{{ calendarPeriodLabel }}</div>
+          <div class="text-body-2 text-medium-emphasis me-auto">{{ calendarPeriodLabel }}</div>
           <v-btn icon="mdi-chevron-left" variant="text" @click="shiftCalendarPeriod(-1)" />
-            <v-tooltip v-if="showTodayShortcut" text="Today" location="top">
-              <template #activator="{ props: tooltipProps }">
-                <v-btn v-bind="tooltipProps" icon="mdi-calendar-today" variant="text" @click="jumpCalendarToToday" />
-              </template>
-            </v-tooltip>
+          <v-tooltip v-if="showTodayShortcut" text="Today" location="top">
+            <template #activator="{ props: tooltipProps }">
+              <v-btn v-bind="tooltipProps" icon="mdi-calendar-today" variant="text" @click="jumpCalendarToToday" />
+            </template>
+          </v-tooltip>
           <v-btn icon="mdi-chevron-right" variant="text" @click="shiftCalendarPeriod(1)" />
         </div>
 
-        <template v-if="calendarMode === 'month'">
-          <div
-            v-for="month in calendarMonths"
-            :key="month.key"
-            class="calendar-month mb-6"
-          >
-            <div class="d-flex align-center justify-space-between mb-3">
-              <h3 class="text-subtitle-1">{{ month.label }}</h3>
-              <div class="text-body-2 text-medium-emphasis">{{ month.entryCount }} entries</div>
-            </div>
+        <calendar-month-view
+          v-if="calendarMode === 'month'"
+          :calendar-months="calendarMonths"
+          :weekday-labels="weekdayLabels"
+          :selected-day-key="selectedDayKey"
+          :is-today-key="isTodayKey"
+          :entry-style="entryStyle"
+          :truncate-description="truncateDescription"
+          :format-entry-time-range="formatEntryTimeRange"
+          @select-day="selectCalendarDay"
+          @open-task="openTaskDialog"
+        />
 
-            <div class="calendar-grid calendar-grid--header mb-2">
-              <div v-for="weekday in weekdayLabels" :key="weekday" class="calendar-weekday text-caption text-medium-emphasis">
-                {{ weekday }}
-              </div>
-            </div>
+        <calendar-week-view
+          v-else-if="calendarMode === 'week'"
+          :columns="weekCalendarColumns"
+          :grid-style="weekCalendarGridStyle"
+          :slots="weekCalendarSlots"
+          :lines="weekCalendarLines"
+          :height="weekCalendarHeight"
+          :bounds="weekCalendarBounds"
+          :calendar-hour-height="calendarHourHeight"
+          :is-today-key="isTodayKey"
+          :entry-style="entryStyle"
+          :format-entry-time-range="formatEntryTimeRange"
+          :calendar-event-style="calendarEventStyle"
+          @open-task="openTaskDialog"
+        />
 
-            <div class="calendar-grid">
-              <div
-                v-for="day in month.days"
-                :key="day.key"
-                class="calendar-day"
-                :class="{
-                  'calendar-day--outside': !day.inCurrentMonth,
-                  'calendar-day--empty': !day.items.length,
-                  'calendar-day--today': isTodayKey(day.key),
-                  'calendar-day--selected': selectedDayKey === day.key,
-                  'calendar-day--clickable': day.items.length,
-                }"
-                @click="selectCalendarDay(day)"
-              >
-                <div class="calendar-day__header">
-                  <span class="text-caption">{{ day.label }}</span>
-                  <span v-if="day.items.length" class="text-caption text-medium-emphasis">{{ day.items.length }}</span>
-                </div>
+        <calendar-day-view
+          v-else
+          :columns="dayCalendarColumns"
+          :weekday-label="dayViewWeekdayLabel"
+          :period-label="calendarPeriodLabel"
+          :entry-count="dayEntries.length"
+          :grid-style="dayCalendarGridStyle"
+          :slots="dayCalendarSlots"
+          :lines="dayCalendarLines"
+          :height="dayCalendarHeight"
+          :bounds="dayCalendarBounds"
+          :calendar-hour-height="calendarHourHeight"
+          :entry-style="entryStyle"
+          :format-entry-time-range="formatEntryTimeRange"
+          :truncate-description="truncateDescription"
+          :calendar-event-style="calendarEventStyle"
+          @open-task="openTaskDialog"
+        />
 
-                <div class="calendar-day__entries">
-                  <v-tooltip
-                    v-for="item in day.items"
-                    :key="item.id"
-                    location="top"
-                    max-width="360"
-                  >
-                    <template #activator="{ props: tooltipProps }">
-                      <button
-                        v-bind="tooltipProps"
-                        type="button"
-                        class="calendar-day__list-item"
-                        :style="entryStyle(item.user)"
-                        @click.stop="openTaskDialog(item)"
-                      >
-                        <div class="calendar-day__list-task">{{ truncateDescription(item.description, 40) }}</div>
-                        <div class="calendar-day__list-meta">
-                          <span>{{ item.user }}</span>
-                          <span>{{ item.duration_hm }}</span>
-                        </div>
-                      </button>
-                    </template>
-                    <div class="calendar-entry-tooltip">
-                      <div class="calendar-entry-tooltip__user">{{ item.user }}</div>
-                      <div>{{ item.description }}</div>
-                      <div>{{ formatEntryTimeRange(item) }}</div>
-                      <div>Total: {{ item.duration_hm }}</div>
-                    </div>
-                  </v-tooltip>
-                </div>
-              </div>
-            </div>
-          </div>
-        </template>
-        <template v-else-if="calendarMode === 'week'">
-          <div v-if="weekCalendarColumns.length" class="time-calendar mb-6">
-            <div class="time-calendar__header">
-              <div class="time-calendar__time-spacer" />
-              <div class="time-calendar__columns" :style="weekCalendarGridStyle">
-                <div
-                  v-for="column in weekCalendarColumns"
-                  :key="column.key"
-                  class="time-calendar__column-header"
-                  :class="{ 'time-calendar__column-header--today': isTodayKey(column.key) }"
-                >
-                  <div class="text-caption text-medium-emphasis">{{ column.weekdayLabel }}</div>
-                  <div class="text-subtitle-2">{{ column.label }}</div>
-                  <div class="text-caption text-medium-emphasis">{{ column.items.length }} entries</div>
-                </div>
-              </div>
-            </div>
-            <div class="time-calendar__body">
-              <div class="time-calendar__times">
-                <div
-                  v-for="slot in weekCalendarSlots"
-                  :key="slot.key"
-                  class="time-calendar__time-slot"
-                  :style="{ height: `${calendarHourHeight}px` }"
-                >
-                  <span>{{ slot.label }}</span>
-                </div>
-              </div>
-              <div class="time-calendar__columns" :style="weekCalendarGridStyle">
-                <div
-                  v-for="column in weekCalendarColumns"
-                  :key="column.key"
-                  class="time-calendar__column"
-                  :class="{ 'time-calendar__column--today': isTodayKey(column.key) }"
-                  :style="{ height: `${weekCalendarHeight}px` }"
-                >
-                  <div
-                    v-for="line in weekCalendarLines"
-                    :key="line.key"
-                    class="time-calendar__hour-line"
-                    :style="{ top: `${line.offset}px` }"
-                  />
-                  <button
-                    v-for="item in column.layoutItems"
-                    :key="item.id"
-                    type="button"
-                    class="time-calendar__event"
-                    :style="calendarEventStyle(item, weekCalendarBounds)"
-                    @click="openTaskDialog(item)"
-                  >
-                    <v-tooltip location="top" max-width="360">
-                      <template #activator="{ props: tooltipProps }">
-                        <div v-bind="tooltipProps" class="time-calendar__event-card" :style="entryStyle(item.user)">
-                          <div class="calendar-entry__user">{{ item.user }}</div>
-                        </div>
-                      </template>
-                      <div class="calendar-entry-tooltip">
-                        <div class="calendar-entry-tooltip__user">{{ item.user }}</div>
-                        <div>{{ item.description }}</div>
-                        <div>{{ formatEntryTimeRange(item) }}</div>
-                        <div>Total: {{ item.duration_hm }}</div>
-                        <div v-if="item.endDate && item.endDate !== item.date">Ends {{ item.endDate }}</div>
-                      </div>
-                    </v-tooltip>
-                  </button>
-                </div>
-              </div>
-            </div>
-          </div>
-          <div v-else class="text-body-2 text-medium-emphasis">No entries available for this week.</div>
-        </template>
-        <template v-else>
-          <div v-if="dayCalendarColumns.length" class="calendar-day-view">
-            <div class="d-flex align-center justify-space-between mb-3">
-              <div>
-                <div class="text-caption text-medium-emphasis">{{ dayViewWeekdayLabel }}</div>
-                <h3 class="text-subtitle-1">{{ calendarPeriodLabel }}</h3>
-              </div>
-              <div class="text-body-2 text-medium-emphasis">{{ dayEntries.length }} entries</div>
-            </div>
-            <div class="time-calendar">
-              <div class="time-calendar__header">
-                <div class="time-calendar__time-spacer" />
-                <div class="time-calendar__columns" :style="dayCalendarGridStyle">
-                  <div
-                    v-for="column in dayCalendarColumns"
-                    :key="column.key"
-                    class="time-calendar__column-header"
-                  >
-                    <div class="text-subtitle-2">{{ column.user }}</div>
-                    <div class="text-caption text-medium-emphasis">{{ column.items.length }} entries</div>
-                  </div>
-                </div>
-              </div>
-              <div class="time-calendar__body">
-                <div class="time-calendar__times">
-                  <div
-                    v-for="slot in dayCalendarSlots"
-                    :key="slot.key"
-                    class="time-calendar__time-slot"
-                    :style="{ height: `${calendarHourHeight}px` }"
-                  >
-                    <span>{{ slot.label }}</span>
-                  </div>
-                </div>
-                <div class="time-calendar__columns" :style="dayCalendarGridStyle">
-                  <div
-                    v-for="column in dayCalendarColumns"
-                    :key="column.key"
-                    class="time-calendar__column"
-                    :style="{ height: `${dayCalendarHeight}px` }"
-                  >
-                    <div
-                      v-for="line in dayCalendarLines"
-                      :key="line.key"
-                      class="time-calendar__hour-line"
-                      :style="{ top: `${line.offset}px` }"
-                    />
-                    <button
-                      v-for="item in column.layoutItems"
-                      :key="item.id"
-                      type="button"
-                      class="time-calendar__event"
-                      :style="calendarEventStyle(item, dayCalendarBounds)"
-                      @click="openTaskDialog(item)"
-                    >
-                      <v-tooltip location="top" max-width="360">
-                        <template #activator="{ props: tooltipProps }">
-                          <div v-bind="tooltipProps" class="time-calendar__event-card time-calendar__event-card--daily" :style="entryStyle(item.user)">
-                            <div class="calendar-entry__time">{{ formatEntryTimeRange(item) }}</div>
-                            <div class="time-calendar__event-task">{{ truncateDescription(item.description, 72) }}</div>
-                          </div>
-                        </template>
-                        <div class="calendar-entry-tooltip">
-                          <div class="calendar-entry-tooltip__user">{{ item.user }}</div>
-                          <div>{{ item.description }}</div>
-                          <div>{{ formatEntryTimeRange(item) }}</div>
-                          <div>Total: {{ item.duration_hm }}</div>
-                          <div v-if="item.endDate && item.endDate !== item.date">Ends {{ item.endDate }}</div>
-                        </div>
-                      </v-tooltip>
-                    </button>
-                  </div>
-                </div>
-              </div>
-            </div>
-          </div>
-          <div v-else class="text-body-2 text-medium-emphasis">No entries available for this day.</div>
-        </template>
         <div class="d-flex align-center justify-space-between mb-2">
           <div class="text-body-2 text-medium-emphasis">
             <template v-if="calendarMode === 'month'">Click a day to open its entries.</template>
@@ -341,6 +141,7 @@
           <div class="text-body-2 text-medium-emphasis">{{ filteredRows.length }} matching entries</div>
         </div>
       </div>
+
       <v-data-table
         v-else-if="!listGroupByDate"
         :headers="headers"
@@ -360,6 +161,7 @@
           </button>
         </template>
       </v-data-table>
+
       <v-expansion-panels v-else multiple>
         <v-expansion-panel
           v-for="group in listDateGroups"
@@ -392,51 +194,19 @@
       </v-expansion-panels>
     </div>
 
-    <v-dialog v-model="taskDialogOpen" max-width="720">
-      <v-card>
-        <v-card-title>Task Details</v-card-title>
-        <v-card-text v-if="selectedTask">
-          <div class="text-body-2 text-medium-emphasis mb-3">
-            {{ selectedTask.user }} • {{ selectedTask.date }} • {{ selectedTask.duration_hm }}
-          </div>
-          <div class="text-body-1">{{ selectedTask.description }}</div>
-        </v-card-text>
-        <v-card-actions>
-          <v-spacer />
-          <v-btn variant="text" @click="closeTaskDialog">Close</v-btn>
-        </v-card-actions>
-      </v-card>
-    </v-dialog>
+    <task-details-dialog
+      v-model="taskDialogOpen"
+      :selected-task="selectedTask"
+    />
 
-    <v-dialog v-model="dayDialogOpen" max-width="960">
-      <v-card>
-        <v-card-title>{{ dayDialogTitle }}</v-card-title>
-        <v-card-text>
-          <v-data-table
-            :headers="headers"
-            :items="selectedDayItems"
-            density="comfortable"
-            item-value="id"
-            :sort-by="[{ key: 'user', order: 'asc' }, { key: 'duration', order: 'desc' }]"
-          >
-            <template #item.description="{ item }">
-              <button
-                type="button"
-                class="task-description-button"
-                :title="item.description"
-                @click="openTaskDialog(item)"
-              >
-                {{ truncateDescription(item.description) }}
-              </button>
-            </template>
-          </v-data-table>
-        </v-card-text>
-        <v-card-actions>
-          <v-spacer />
-          <v-btn variant="text" @click="closeDayDialog">Close</v-btn>
-        </v-card-actions>
-      </v-card>
-    </v-dialog>
+    <day-entries-dialog
+      v-model="dayDialogOpen"
+      :title="dayDialogTitle"
+      :headers="headers"
+      :items="selectedDayItems"
+      :truncate-description="truncateDescription"
+      @open-task="openTaskDialog"
+    />
   </v-card>
 </template>
 
@@ -444,6 +214,36 @@
 import { computed, onMounted, ref, watch } from 'vue'
 
 import api, { getStoredSession } from '../services/api'
+import CalendarDayView from './user-report-review/CalendarDayView.vue'
+import CalendarLegend from './user-report-review/CalendarLegend.vue'
+import CalendarMonthView from './user-report-review/CalendarMonthView.vue'
+import CalendarWeekView from './user-report-review/CalendarWeekView.vue'
+import DayEntriesDialog from './user-report-review/DayEntriesDialog.vue'
+import ReportReviewHeader from './user-report-review/ReportReviewHeader.vue'
+import TaskDetailsDialog from './user-report-review/TaskDetailsDialog.vue'
+import {
+  addDays,
+  buildCalendarLines,
+  buildCalendarSlots,
+  buildDailyDaySegments,
+  buildWeeklyDaySegments,
+  calendarHourHeight,
+  clamp,
+  dayLabelFormatter,
+  dayShortFormatter,
+  fullDayCalendarBounds,
+  layoutCalendarItems,
+  monthLabelFormatter,
+  parseReportDate,
+  parseReportDateTime,
+  sortedRowsByTime,
+  startOfDay,
+  startOfWeek,
+  toCalendarKey,
+  weekdayLabels,
+  weekdayLongFormatter,
+  weekdayShortFormatter,
+} from './user-report-review/calendarUtils'
 
 const props = defineProps({
   reportPath: {
@@ -490,32 +290,6 @@ const groupedHeaders = [
   { title: 'Duration', key: 'duration_hm' },
 ]
 
-const runDir = computed(() => {
-  const [dir] = (props.reportPath || '').split('/')
-  return dir || ''
-})
-
-const isAdmin = computed(() => authSession.value?.user?.role === 'Admin')
-
-const canRefreshCurrentRun = computed(() => {
-  const run = currentRun.value
-  return Boolean(run?.id && run?.start_date && run?.end_date && run?.timezone)
-})
-
-const weekdayLabels = ['Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat', 'Sun']
-const monthLabelFormatter = new Intl.DateTimeFormat('en', { month: 'long', year: 'numeric' })
-const dayLabelFormatter = new Intl.DateTimeFormat('en', { weekday: 'long', month: 'long', day: 'numeric', year: 'numeric' })
-const dayShortFormatter = new Intl.DateTimeFormat('en', { month: 'short', day: 'numeric' })
-const weekdayLongFormatter = new Intl.DateTimeFormat('en', { weekday: 'long' })
-const weekdayShortFormatter = new Intl.DateTimeFormat('en', { weekday: 'short' })
-const timeLabelFormatter = new Intl.DateTimeFormat('en', { hour: 'numeric' })
-const calendarHourHeight = 56
-const fullDayCalendarBounds = {
-  startHour: 0,
-  endHour: 24,
-  totalHours: 24,
-  totalMinutes: 24 * 60,
-}
 const userColorPalette = [
   { background: '#1f6feb22', border: '#1f6feb', text: '#c6dbff' },
   { background: '#23863622', border: '#238636', text: '#b7f0c2' },
@@ -527,199 +301,18 @@ const userColorPalette = [
   { background: '#2da44e22', border: '#2da44e', text: '#c0f1cf' },
 ]
 
-const parseReportDate = (value) => {
-  if (!value) return null
-
-  const slashMatch = String(value).match(/^(\d{2})\/(\d{2})\/(\d{4})$/)
-  if (slashMatch) {
-    const [, day, month, year] = slashMatch
-    return new Date(Number(year), Number(month) - 1, Number(day))
-  }
-
-  const dashMatch = String(value).match(/^(\d{4})-(\d{2})-(\d{2})$/)
-  if (dashMatch) {
-    const [, year, month, day] = dashMatch
-    return new Date(Number(year), Number(month) - 1, Number(day))
-  }
-
-  const parsed = new Date(value)
-  return Number.isNaN(parsed.getTime()) ? null : parsed
-}
-
-const toCalendarKey = (date) => {
-  return [
-    date.getFullYear(),
-    String(date.getMonth() + 1).padStart(2, '0'),
-    String(date.getDate()).padStart(2, '0'),
-  ].join('-')
-}
+const runDir = computed(() => {
+  const [dir] = (props.reportPath || '').split('/')
+  return dir || ''
+})
 
 const todayKey = toCalendarKey(new Date())
+const isAdmin = computed(() => authSession.value?.user?.role === 'Admin')
 
-const parseReportDateTime = (value) => {
-  if (!value) return null
-
-  const dateTimeMatch = String(value).match(
-    /^(\d{4})-(\d{2})-(\d{2})[ T](\d{2}):(\d{2})(?::(\d{2}))?$/
-  )
-  if (dateTimeMatch) {
-    const [, year, month, day, hour, minute, second = '00'] = dateTimeMatch
-    return new Date(
-      Number(year),
-      Number(month) - 1,
-      Number(day),
-      Number(hour),
-      Number(minute),
-      Number(second)
-    )
-  }
-
-  const parsed = new Date(value)
-  return Number.isNaN(parsed.getTime()) ? null : parsed
-}
-
-const startOfDay = (date) => new Date(date.getFullYear(), date.getMonth(), date.getDate())
-
-const addDays = (date, days) => {
-  const result = new Date(date)
-  result.setDate(result.getDate() + days)
-  return result
-}
-
-const startOfWeek = (date) => {
-  const result = startOfDay(date)
-  const offset = (result.getDay() + 6) % 7
-  result.setDate(result.getDate() - offset)
-  return result
-}
-
-const clamp = (value, min, max) => Math.min(Math.max(value, min), max)
-
-const toMinutesOfDay = (date) => {
-  return (date.getHours() * 60) + date.getMinutes() + (date.getSeconds() / 60)
-}
-
-const buildCalendarSlots = (bounds) => {
-  return Array.from({ length: bounds.totalHours }, (_, index) => {
-    const hour = bounds.startHour + index
-    const labelDate = new Date(2026, 0, 1, hour, 0, 0)
-    return {
-      key: `hour-${hour}`,
-      label: timeLabelFormatter.format(labelDate),
-      offset: index * calendarHourHeight,
-    }
-  })
-}
-
-const buildCalendarLines = (bounds) => {
-  return Array.from({ length: bounds.totalHours + 1 }, (_, index) => ({
-    key: `line-${index}`,
-    offset: index * calendarHourHeight,
-  }))
-}
-
-const layoutCalendarItems = (items) => {
-  if (!items.length) return []
-
-  const normalized = sortedRowsByTime(items).map((item) => {
-    const rawStart = Number.isFinite(item.startMinutes)
-      ? item.startMinutes
-      : item.startDateTime
-        ? toMinutesOfDay(item.startDateTime)
-        : 0
-    const rawEnd = Number.isFinite(item.endMinutes)
-      ? item.endMinutes
-      : item.endDateTime
-        ? toMinutesOfDay(item.endDateTime)
-        : rawStart + 30
-    const startMinutes = clamp(rawStart, 0, 24 * 60)
-    const endMinutes = clamp(Math.max(rawEnd, startMinutes + 15), 0, 24 * 60)
-    return {
-      ...item,
-      startMinutes,
-      endMinutes,
-    }
-  })
-
-  const clusters = []
-  let currentCluster = []
-  let clusterEnd = -1
-
-  normalized.forEach((item) => {
-    if (!currentCluster.length || item.startMinutes < clusterEnd) {
-      currentCluster.push(item)
-      clusterEnd = Math.max(clusterEnd, item.endMinutes)
-      return
-    }
-
-    clusters.push(currentCluster)
-    currentCluster = [item]
-    clusterEnd = item.endMinutes
-  })
-
-  if (currentCluster.length) {
-    clusters.push(currentCluster)
-  }
-
-  return clusters.flatMap((cluster) => {
-    const laneEnds = []
-    const positioned = cluster.map((item) => {
-      let laneIndex = laneEnds.findIndex((laneEnd) => laneEnd <= item.startMinutes)
-      if (laneIndex === -1) {
-        laneIndex = laneEnds.length
-        laneEnds.push(item.endMinutes)
-      } else {
-        laneEnds[laneIndex] = item.endMinutes
-      }
-
-      return {
-        ...item,
-        laneIndex,
-      }
-    })
-
-    return positioned.map((item) => ({
-      ...item,
-      laneCount: laneEnds.length,
-    }))
-  })
-}
-
-const buildWeeklyDaySegments = (items, dayDate) => {
-  const dayStart = startOfDay(dayDate)
-  const nextDayStart = addDays(dayStart, 1)
-
-  return items.flatMap((item) => {
-    if (!item.startDateTime || !item.endDateTime) {
-      return []
-    }
-
-    if (item.endDateTime <= dayStart || item.startDateTime >= nextDayStart) {
-      return []
-    }
-
-    const segmentStart = item.startDateTime > dayStart ? item.startDateTime : dayStart
-    const segmentEnd = item.endDateTime < nextDayStart ? item.endDateTime : nextDayStart
-    const startMinutes = toMinutesOfDay(segmentStart)
-    const endMinutes = segmentEnd.getTime() === nextDayStart.getTime() ? 24 * 60 : toMinutesOfDay(segmentEnd)
-
-    return [
-      {
-        ...item,
-        id: `${item.id}-${toCalendarKey(dayDate)}`,
-        segmentDateKey: toCalendarKey(dayDate),
-        startDateTime: segmentStart,
-        endDateTime: segmentEnd,
-        startMinutes,
-        endMinutes: Math.max(endMinutes, startMinutes + 15),
-      },
-    ]
-  })
-}
-
-const buildDailyDaySegments = (items, dayDate) => {
-  return buildWeeklyDaySegments(items, dayDate)
-}
+const canRefreshCurrentRun = computed(() => {
+  const run = currentRun.value
+  return Boolean(run?.id && run?.start_date && run?.end_date && run?.timezone)
+})
 
 const userFilteredRows = computed(() => rows.value)
 
@@ -730,9 +323,7 @@ const calendarRows = computed(() => {
   return userFilteredRows.value.filter((row) => activeLegendUsers.value.includes(row.user))
 })
 
-const filteredRows = computed(() => {
-  return calendarRows.value
-})
+const filteredRows = computed(() => calendarRows.value)
 
 const selectedReportUsers = computed(() => {
   return activeLegendUsers.value.filter((user) => reportFiles.value.some((rf) => rf.user === user))
@@ -750,7 +341,6 @@ const allLegendUsersSelected = computed(() => {
 })
 
 const showSelectedDownloadButton = computed(() => !allLegendUsersSelected.value)
-
 const canDownloadAllReportsZip = computed(() => Boolean(runDir.value && reportFiles.value.length))
 
 const downloadSelectedButtonText = computed(() => {
@@ -860,112 +450,25 @@ const colorByUser = computed(() => {
   )
 })
 
-const entryStyle = (user) => {
-  const palette = colorByUser.value[user] || userColorPalette[0]
-  return {
-    backgroundColor: palette.background,
-    borderLeft: `3px solid ${palette.border}`,
-    color: palette.text,
-  }
-}
+const weekDays = computed(() => {
+  if (!focusedDate.value) return []
 
-const isTodayKey = (key) => key === todayKey
-
-const isLegendUserActive = (user) => {
-  return activeLegendUsers.value.includes(user)
-}
-
-const toggleLegendUser = (user) => {
-  activeLegendUsers.value = isLegendUserActive(user)
-    ? activeLegendUsers.value.filter((item) => item !== user)
-    : [...activeLegendUsers.value, user]
-}
-
-const selectCalendarDay = (day) => {
-  if (!day.items.length) return
-  focusedDateKey.value = day.key
-  selectedDayKey.value = day.key
-  selectedDayItems.value = day.items
-  dayDialogOpen.value = true
-}
-
-const clearCalendarFilters = () => {
-  activeLegendUsers.value = []
-}
-
-const truncateDescription = (value, maxLength = 48) => {
-  if (!value || value.length <= maxLength) return value
-  return `${value.slice(0, maxLength - 1)}…`
-}
-
-const openTaskDialog = (item) => {
-  selectedTask.value = item
-  taskDialogOpen.value = true
-}
-
-const closeTaskDialog = () => {
-  taskDialogOpen.value = false
-  selectedTask.value = null
-}
-
-const closeDayDialog = () => {
-  dayDialogOpen.value = false
-  selectedDayKey.value = ''
-  selectedDayItems.value = []
-}
-
-const sortedRowsByTime = (items) => {
-  return [...items].sort((left, right) => {
-    const leftTime = left.startDateTime?.getTime() ?? parseReportDate(left.date)?.getTime() ?? 0
-    const rightTime = right.startDateTime?.getTime() ?? parseReportDate(right.date)?.getTime() ?? 0
-    if (leftTime !== rightTime) return leftTime - rightTime
-    return left.user.localeCompare(right.user) || left.description.localeCompare(right.description)
+  const weekStart = startOfWeek(focusedDate.value)
+  return Array.from({ length: 7 }, (_, index) => {
+    const date = addDays(weekStart, index)
+    const dayKey = toCalendarKey(date)
+    return {
+      key: dayKey,
+      label: dayShortFormatter.format(date),
+      weekdayLabel: weekdayShortFormatter.format(date),
+      items: sortedRowsByTime(filteredRows.value.filter((row) => row.dayKey === dayKey)),
+    }
   })
-}
-
-const syncFocusedDate = () => {
-  const available = availableDateKeys.value
-  if (!available.length) {
-    focusedDateKey.value = ''
-    return
-  }
-
-  const todayKey = toCalendarKey(new Date())
-  if (focusedDateKey.value && available.includes(focusedDateKey.value)) {
-    return
-  }
-
-  focusedDateKey.value = available.includes(todayKey) ? todayKey : available[0]
-}
-
-const formatEntryTimeRange = (item) => {
-  const start = item.startTime || 'Unknown'
-  const end = item.endTime || 'Unknown'
-  return `${start} - ${end}`
-}
-
-const calendarPeriodLabel = computed(() => {
-  if (!focusedDate.value) return 'No entries available'
-
-  if (calendarMode.value === 'day') {
-    return dayLabelFormatter.format(focusedDate.value)
-  }
-
-  if (calendarMode.value === 'week') {
-    const start = startOfWeek(focusedDate.value)
-    const end = addDays(start, 6)
-    return `${dayShortFormatter.format(start)} - ${dayShortFormatter.format(end)}`
-  }
-
-  return 'All months'
 })
 
 const weekCalendarBounds = computed(() => fullDayCalendarBounds)
-
 const weekCalendarSlots = computed(() => buildCalendarSlots(weekCalendarBounds.value))
-
 const weekCalendarLines = computed(() => buildCalendarLines(weekCalendarBounds.value))
-
 const weekCalendarHeight = computed(() => weekCalendarBounds.value.totalHours * calendarHourHeight)
 
 const weekCalendarColumns = computed(() => {
@@ -982,22 +485,6 @@ const weekCalendarColumns = computed(() => {
 const weekCalendarGridStyle = computed(() => ({
   gridTemplateColumns: `repeat(${Math.max(weekCalendarColumns.value.length, 1)}, minmax(180px, 1fr))`,
 }))
-
-const weekDays = computed(() => {
-  if (!focusedDate.value) return []
-
-  const weekStart = startOfWeek(focusedDate.value)
-  return Array.from({ length: 7 }, (_, index) => {
-    const date = addDays(weekStart, index)
-    const dayKey = toCalendarKey(date)
-    return {
-      key: dayKey,
-      label: dayShortFormatter.format(date),
-      weekdayLabel: weekdayShortFormatter.format(date),
-      items: sortedRowsByTime(filteredRows.value.filter((row) => row.dayKey === dayKey)),
-    }
-  })
-})
 
 const dayEntries = computed(() => {
   if (!focusedDate.value) return []
@@ -1027,11 +514,8 @@ const dayUserColumns = computed(() => {
 })
 
 const dayCalendarBounds = computed(() => fullDayCalendarBounds)
-
 const dayCalendarSlots = computed(() => buildCalendarSlots(dayCalendarBounds.value))
-
 const dayCalendarLines = computed(() => buildCalendarLines(dayCalendarBounds.value))
-
 const dayCalendarHeight = computed(() => dayCalendarBounds.value.totalHours * calendarHourHeight)
 
 const dayCalendarColumns = computed(() => {
@@ -1046,33 +530,6 @@ const dayCalendarColumns = computed(() => {
 const dayCalendarGridStyle = computed(() => ({
   gridTemplateColumns: `repeat(${Math.max(dayCalendarColumns.value.length, 1)}, minmax(220px, 1fr))`,
 }))
-
-const calendarEventStyle = (item, bounds) => {
-  const boundedStart = clamp(item.startMinutes, bounds.startHour * 60, bounds.endHour * 60)
-  const boundedEnd = clamp(item.endMinutes, boundedStart + 15, bounds.endHour * 60)
-  const top = ((boundedStart - (bounds.startHour * 60)) / 60) * calendarHourHeight
-  const height = Math.max(((boundedEnd - boundedStart) / 60) * calendarHourHeight, 24)
-  const widthPercent = 100 / Math.max(item.laneCount || 1, 1)
-  const leftPercent = widthPercent * (item.laneIndex || 0)
-
-  return {
-    top: `${top}px`,
-    height: `${height}px`,
-    left: `calc(${leftPercent}% + 4px)`,
-    width: `calc(${widthPercent}% - 8px)`,
-  }
-}
-
-const shiftCalendarPeriod = (direction) => {
-  if (!focusedDate.value) return
-  const offset = calendarMode.value === 'week' ? direction * 7 : direction
-  focusedDateKey.value = toCalendarKey(addDays(focusedDate.value, offset))
-}
-
-const jumpCalendarToToday = () => {
-  const todayKey = toCalendarKey(new Date())
-  focusedDateKey.value = todayKey
-}
 
 const calendarMonths = computed(() => {
   const groups = dateGroups.value
@@ -1134,6 +591,107 @@ const calendarMonths = computed(() => {
     })
 })
 
+const entryStyle = (user) => {
+  const palette = colorByUser.value[user] || userColorPalette[0]
+  return {
+    backgroundColor: palette.background,
+    borderLeft: `3px solid ${palette.border}`,
+    color: palette.text,
+  }
+}
+
+const isTodayKey = (key) => key === todayKey
+
+const toggleLegendUser = (user) => {
+  activeLegendUsers.value = activeLegendUsers.value.includes(user)
+    ? activeLegendUsers.value.filter((item) => item !== user)
+    : [...activeLegendUsers.value, user]
+}
+
+const selectCalendarDay = (day) => {
+  if (!day.items.length) return
+  focusedDateKey.value = day.key
+  selectedDayKey.value = day.key
+  selectedDayItems.value = day.items
+  dayDialogOpen.value = true
+}
+
+const clearCalendarFilters = () => {
+  activeLegendUsers.value = []
+}
+
+const truncateDescription = (value, maxLength = 48) => {
+  if (!value || value.length <= maxLength) return value
+  return `${value.slice(0, maxLength - 1)}…`
+}
+
+const openTaskDialog = (item) => {
+  selectedTask.value = item
+  taskDialogOpen.value = true
+}
+
+const syncFocusedDate = () => {
+  const available = availableDateKeys.value
+  if (!available.length) {
+    focusedDateKey.value = ''
+    return
+  }
+
+  if (focusedDateKey.value && available.includes(focusedDateKey.value)) {
+    return
+  }
+
+  focusedDateKey.value = available.includes(todayKey) ? todayKey : available[0]
+}
+
+const formatEntryTimeRange = (item) => {
+  const start = item.startTime || 'Unknown'
+  const end = item.endTime || 'Unknown'
+  return `${start} - ${end}`
+}
+
+const calendarPeriodLabel = computed(() => {
+  if (!focusedDate.value) return 'No entries available'
+
+  if (calendarMode.value === 'day') {
+    return dayLabelFormatter.format(focusedDate.value)
+  }
+
+  if (calendarMode.value === 'week') {
+    const start = startOfWeek(focusedDate.value)
+    const end = addDays(start, 6)
+    return `${dayShortFormatter.format(start)} - ${dayShortFormatter.format(end)}`
+  }
+
+  return 'All months'
+})
+
+const calendarEventStyle = (item, bounds) => {
+  const boundedStart = clamp(item.startMinutes, bounds.startHour * 60, bounds.endHour * 60)
+  const boundedEnd = clamp(item.endMinutes, boundedStart + 15, bounds.endHour * 60)
+  const top = ((boundedStart - (bounds.startHour * 60)) / 60) * calendarHourHeight
+  const height = Math.max(((boundedEnd - boundedStart) / 60) * calendarHourHeight, 24)
+  const widthPercent = 100 / Math.max(item.laneCount || 1, 1)
+  const leftPercent = widthPercent * (item.laneIndex || 0)
+
+  return {
+    top: `${top}px`,
+    height: `${height}px`,
+    left: `calc(${leftPercent}% + 4px)`,
+    width: `calc(${widthPercent}% - 8px)`,
+  }
+}
+
+const shiftCalendarPeriod = (direction) => {
+  if (!focusedDate.value) return
+  const offset = calendarMode.value === 'week' ? direction * 7 : direction
+  focusedDateKey.value = toCalendarKey(addDays(focusedDate.value, offset))
+}
+
+const jumpCalendarToToday = () => {
+  focusedDateKey.value = todayKey
+}
+
 const loadReport = async () => {
   if (!runDir.value) {
     error.value = 'Missing run directory.'
@@ -1190,12 +748,13 @@ const loadReport = async () => {
     activeLegendUsers.value = []
     focusedDateKey.value = ''
     selectedDayKey.value = ''
+    selectedDayItems.value = []
     if (props.user) {
       activeLegendUsers.value = flatRows.some((row) => row.user === props.user) ? [props.user] : []
     }
     syncFocusedDate()
-  } catch (e) {
-    error.value = e.response?.data?.detail || 'Could not load run reports.'
+  } catch (requestError) {
+    error.value = requestError.response?.data?.detail || 'Could not load run reports.'
   } finally {
     loading.value = false
   }
@@ -1222,8 +781,8 @@ const downloadSelectedReport = async () => {
     link.click()
     document.body.removeChild(link)
     window.URL.revokeObjectURL(blobUrl)
-  } catch (e) {
-    error.value = e.response?.data?.detail || 'Could not download selected reports.'
+  } catch (requestError) {
+    error.value = requestError.response?.data?.detail || 'Could not download selected reports.'
   }
 }
 
@@ -1241,8 +800,8 @@ const downloadAllReportsZip = async () => {
     link.click()
     document.body.removeChild(link)
     window.URL.revokeObjectURL(blobUrl)
-  } catch (e) {
-    error.value = e.response?.data?.detail || 'Could not download reports zip.'
+  } catch (requestError) {
+    error.value = requestError.response?.data?.detail || 'Could not download reports zip.'
   }
 }
 
@@ -1280,180 +839,6 @@ watch(runDir, loadCurrentRun, { immediate: true })
 </script>
 
 <style scoped>
-.calendar-grid {
-  display: grid;
-  grid-template-columns: repeat(7, minmax(0, 1fr));
-  gap: 12px;
-}
-
-.calendar-grid--header {
-  gap: 8px;
-}
-
-.calendar-weekday {
-  padding: 0 4px;
-}
-
-.calendar-day {
-  min-height: 180px;
-  border: 1px solid rgba(255, 255, 255, 0.08);
-  border-radius: 12px;
-  padding: 10px;
-  background: rgba(255, 255, 255, 0.02);
-}
-
-.calendar-day--clickable {
-  cursor: pointer;
-}
-
-.calendar-day--selected {
-  border-color: rgba(31, 111, 235, 0.8);
-  box-shadow: inset 0 0 0 1px rgba(31, 111, 235, 0.45);
-}
-
-.calendar-day--today {
-  border-color: rgba(210, 153, 34, 0.9);
-  box-shadow: inset 0 0 0 1px rgba(210, 153, 34, 0.45);
-}
-
-.calendar-day--outside {
-  opacity: 0.4;
-}
-
-.calendar-day--empty {
-  background: rgba(255, 255, 255, 0.01);
-}
-
-.calendar-day__header {
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-  margin-bottom: 8px;
-}
-
-.calendar-day__entries {
-  display: flex;
-  flex-direction: column;
-  gap: 4px;
-}
-
-.calendar-day__list-item {
-  display: block;
-  width: 100%;
-  padding: 6px 8px;
-  border: 0;
-  border-radius: 8px;
-  color: inherit;
-  text-align: left;
-  cursor: pointer;
-  font-size: 0.8125rem;
-  line-height: 1.3;
-}
-
-.calendar-day__list-task {
-  margin-bottom: 2px;
-}
-
-.calendar-day__list-meta {
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-  gap: 8px;
-  font-size: 0.75rem;
-  opacity: 0.9;
-}
-
-.calendar-entry {
-  border-radius: 10px;
-  padding: 8px 10px;
-}
-
-.calendar-entry--detailed {
-  padding: 12px;
-}
-
-.calendar-entry__header {
-  display: flex;
-  align-items: flex-start;
-  justify-content: space-between;
-  gap: 12px;
-  margin-bottom: 6px;
-}
-
-.calendar-entry__user {
-  font-size: 0.75rem;
-  font-weight: 700;
-  margin-bottom: 2px;
-}
-
-.calendar-entry__time {
-  font-size: 0.75rem;
-  opacity: 0.9;
-  white-space: nowrap;
-}
-
-.calendar-entry__task {
-  display: block;
-  width: 100%;
-  padding: 0;
-  border: 0;
-  background: transparent;
-  text-align: left;
-  cursor: pointer;
-  font-size: 0.8125rem;
-  line-height: 1.25;
-  margin-bottom: 4px;
-  color: inherit;
-}
-
-.calendar-entry__duration {
-  font-size: 0.75rem;
-  opacity: 0.9;
-}
-
-.calendar-entry__compact {
-  display: block;
-  width: 100%;
-  padding: 0;
-  border: 0;
-  background: transparent;
-  color: inherit;
-  text-align: left;
-  cursor: pointer;
-}
-
-.calendar-entry__meta {
-  display: flex;
-  flex-wrap: wrap;
-  gap: 12px;
-  font-size: 0.75rem;
-  opacity: 0.9;
-}
-
-.calendar-legend__item {
-  display: inline-flex;
-  align-items: center;
-  gap: 8px;
-  padding: 6px 10px;
-  border-radius: 999px;
-  background: rgba(255, 255, 255, 0.04);
-  border: 1px solid transparent;
-  color: inherit;
-  cursor: pointer;
-}
-
-.calendar-legend__item--active {
-  border-color: rgba(255, 255, 255, 0.18);
-  background: rgba(255, 255, 255, 0.08);
-}
-
-.calendar-legend__swatch {
-  width: 14px;
-  height: 14px;
-  border-radius: 999px;
-  display: inline-block;
-}
-
 .task-description-button {
   padding: 0;
   border: 0;
@@ -1461,128 +846,5 @@ watch(runDir, loadCurrentRun, { immediate: true })
   color: inherit;
   cursor: pointer;
   text-align: left;
-}
-
-.calendar-day-view {
-  margin-bottom: 24px;
-}
-
-.time-calendar {
-  overflow-x: auto;
-  overflow-y: hidden;
-}
-
-.time-calendar__header,
-.time-calendar__body {
-  display: grid;
-  grid-template-columns: 72px minmax(0, 1fr);
-  min-width: 960px;
-}
-
-.time-calendar__time-spacer {
-  border-bottom: 1px solid rgba(255, 255, 255, 0.08);
-}
-
-.time-calendar__columns {
-  display: grid;
-  gap: 12px;
-}
-
-.time-calendar__column-header {
-  padding: 0 8px 12px;
-  border-bottom: 1px solid rgba(255, 255, 255, 0.08);
-}
-
-.time-calendar__column-header--today {
-  background: rgba(210, 153, 34, 0.12);
-  border-radius: 10px 10px 0 0;
-}
-
-.time-calendar__times {
-  position: relative;
-}
-
-.time-calendar__time-slot {
-  display: flex;
-  align-items: flex-start;
-  justify-content: flex-end;
-  padding-right: 10px;
-  font-size: 0.75rem;
-  color: rgba(255, 255, 255, 0.7);
-}
-
-.time-calendar__column {
-  position: relative;
-  border-left: 1px solid rgba(255, 255, 255, 0.08);
-  border-right: 1px solid rgba(255, 255, 255, 0.04);
-  background:
-    linear-gradient(to bottom, rgba(255, 255, 255, 0.03), rgba(255, 255, 255, 0.01));
-  overflow: hidden;
-}
-
-.time-calendar__column--today {
-  background:
-    linear-gradient(to bottom, rgba(210, 153, 34, 0.12), rgba(210, 153, 34, 0.04));
-}
-
-.time-calendar__hour-line {
-  position: absolute;
-  left: 0;
-  right: 0;
-  height: 1px;
-  background: rgba(255, 255, 255, 0.08);
-}
-
-.time-calendar__event {
-  position: absolute;
-  padding: 0;
-  border: 0;
-  background: transparent;
-  text-align: left;
-  cursor: pointer;
-}
-
-.time-calendar__event-card {
-  height: 100%;
-  border-radius: 10px;
-  padding: 8px 10px;
-  overflow: hidden;
-  display: flex;
-  align-items: flex-start;
-}
-
-.time-calendar__event-card--daily {
-  flex-direction: column;
-}
-
-.time-calendar__event-task {
-  font-size: 0.8125rem;
-  line-height: 1.25;
-  margin: 4px 0 6px;
-}
-
-.calendar-entry-tooltip {
-  display: flex;
-  flex-direction: column;
-  gap: 4px;
-}
-
-.calendar-entry-tooltip__user {
-  font-weight: 700;
-}
-
-@media (max-width: 960px) {
-  .calendar-grid {
-    grid-template-columns: 1fr;
-  }
-
-  .calendar-day {
-    min-height: auto;
-  }
-
-  .time-calendar__header,
-  .time-calendar__body {
-    min-width: 720px;
-  }
 }
 </style>
