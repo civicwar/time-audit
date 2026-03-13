@@ -622,8 +622,16 @@ const layoutCalendarItems = (items) => {
   if (!items.length) return []
 
   const normalized = sortedRowsByTime(items).map((item) => {
-    const rawStart = item.startDateTime ? toMinutesOfDay(item.startDateTime) : 0
-    const rawEnd = item.endDateTime ? toMinutesOfDay(item.endDateTime) : rawStart + 30
+    const rawStart = Number.isFinite(item.startMinutes)
+      ? item.startMinutes
+      : item.startDateTime
+        ? toMinutesOfDay(item.startDateTime)
+        : 0
+    const rawEnd = Number.isFinite(item.endMinutes)
+      ? item.endMinutes
+      : item.endDateTime
+        ? toMinutesOfDay(item.endDateTime)
+        : rawStart + 30
     const startMinutes = clamp(rawStart, 0, 24 * 60)
     const endMinutes = clamp(Math.max(rawEnd, startMinutes + 15), 0, 24 * 60)
     return {
@@ -675,6 +683,42 @@ const layoutCalendarItems = (items) => {
       laneCount: laneEnds.length,
     }))
   })
+}
+
+const buildWeeklyDaySegments = (items, dayDate) => {
+  const dayStart = startOfDay(dayDate)
+  const nextDayStart = addDays(dayStart, 1)
+
+  return items.flatMap((item) => {
+    if (!item.startDateTime || !item.endDateTime) {
+      return []
+    }
+
+    if (item.endDateTime <= dayStart || item.startDateTime >= nextDayStart) {
+      return []
+    }
+
+    const segmentStart = item.startDateTime > dayStart ? item.startDateTime : dayStart
+    const segmentEnd = item.endDateTime < nextDayStart ? item.endDateTime : nextDayStart
+    const startMinutes = toMinutesOfDay(segmentStart)
+    const endMinutes = segmentEnd.getTime() === nextDayStart.getTime() ? 24 * 60 : toMinutesOfDay(segmentEnd)
+
+    return [
+      {
+        ...item,
+        id: `${item.id}-${toCalendarKey(dayDate)}`,
+        segmentDateKey: toCalendarKey(dayDate),
+        startDateTime: segmentStart,
+        endDateTime: segmentEnd,
+        startMinutes,
+        endMinutes: Math.max(endMinutes, startMinutes + 15),
+      },
+    ]
+  })
+}
+
+const buildDailyDaySegments = (items, dayDate) => {
+  return buildWeeklyDaySegments(items, dayDate)
 }
 
 const userFilteredRows = computed(() => rows.value)
@@ -925,10 +969,14 @@ const weekCalendarLines = computed(() => buildCalendarLines(weekCalendarBounds.v
 const weekCalendarHeight = computed(() => weekCalendarBounds.value.totalHours * calendarHourHeight)
 
 const weekCalendarColumns = computed(() => {
-  return weekDays.value.map((day) => ({
-    ...day,
-    layoutItems: layoutCalendarItems(day.items),
-  }))
+  return weekDays.value.map((day) => {
+    const dayDate = parseReportDate(day.key)
+    const segmentedItems = dayDate ? buildWeeklyDaySegments(filteredRows.value, dayDate) : []
+    return {
+      ...day,
+      layoutItems: layoutCalendarItems(segmentedItems),
+    }
+  })
 })
 
 const weekCalendarGridStyle = computed(() => ({
@@ -952,8 +1000,8 @@ const weekDays = computed(() => {
 })
 
 const dayEntries = computed(() => {
-  if (!focusedDateKey.value) return []
-  return sortedRowsByTime(filteredRows.value.filter((row) => row.dayKey === focusedDateKey.value))
+  if (!focusedDate.value) return []
+  return sortedRowsByTime(buildDailyDaySegments(filteredRows.value, focusedDate.value))
 })
 
 const dayColumnUsers = computed(() => {
@@ -964,7 +1012,7 @@ const dayColumnUsers = computed(() => {
 })
 
 const dayUserColumns = computed(() => {
-  if (!focusedDateKey.value) return []
+  if (!focusedDate.value) return []
 
   const itemsByUser = dayEntries.value.reduce((acc, item) => {
     if (!acc[item.user]) acc[item.user] = []
