@@ -3,16 +3,29 @@
     <div class="time-calendar__header">
       <div class="time-calendar__time-spacer" />
       <div class="time-calendar__columns" :style="gridStyle">
-        <div
+        <v-tooltip
           v-for="column in columns"
           :key="column.key"
-          class="time-calendar__column-header"
-          :class="{ 'time-calendar__column-header--today': isTodayKey(column.key) }"
+          text="Open daily view"
+          location="top"
         >
-          <div class="text-caption text-medium-emphasis">{{ column.weekdayLabel }}</div>
-          <div class="text-subtitle-2">{{ column.label }}</div>
-          <div class="text-caption text-medium-emphasis">{{ column.items.length }} entries</div>
-        </div>
+          <template #activator="{ props: tooltipProps }">
+            <div
+              v-bind="tooltipProps"
+              class="time-calendar__column-header"
+              :class="{ 'time-calendar__column-header--today': isTodayKey(column.key) }"
+              role="button"
+              tabindex="0"
+              @click="$emit('select-day', column.key)"
+              @keydown.enter.prevent="$emit('select-day', column.key)"
+              @keydown.space.prevent="$emit('select-day', column.key)"
+            >
+              <div class="text-caption text-medium-emphasis">{{ column.weekdayLabel }}</div>
+              <div class="text-subtitle-2">{{ column.label }}</div>
+              <div class="text-caption text-medium-emphasis">{{ column.items.length }} entries</div>
+            </div>
+          </template>
+        </v-tooltip>
       </div>
     </div>
     <div class="time-calendar__body">
@@ -85,7 +98,7 @@ defineProps({
   calendarEventStyle: { type: Function, required: true },
 })
 
-defineEmits(['open-task'])
+defineEmits(['open-task', 'select-day'])
 </script>
 
 <style scoped>
@@ -129,6 +142,7 @@ defineEmits(['open-task'])
 .time-calendar__column-header {
   padding: 0 8px 12px;
   border-bottom: 1px solid rgba(255, 255, 255, 0.08);
+  cursor: pointer;
 }
 
 .time-calendar__column-header--today {

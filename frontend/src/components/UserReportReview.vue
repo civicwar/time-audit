@@ -112,6 +112,7 @@
           :format-entry-time-range="formatEntryTimeRange"
           :calendar-event-style="calendarEventStyle"
           @open-task="openTaskDialog"
+          @select-day="openDayView"
         />
 
         <calendar-day-view
@@ -690,6 +691,11 @@ const shiftCalendarPeriod = (direction) => {
 
 const jumpCalendarToToday = () => {
   focusedDateKey.value = todayKey
+}
+
+const openDayView = (dayKey) => {
+  focusedDateKey.value = dayKey
+  calendarMode.value = 'day'
 }
 
 const loadReport = async () => {
