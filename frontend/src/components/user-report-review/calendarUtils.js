@@ -1,10 +1,29 @@
+import dayjs from 'dayjs'
+import customParseFormat from 'dayjs/plugin/customParseFormat'
+import isoWeek from 'dayjs/plugin/isoWeek'
+
+dayjs.extend(customParseFormat)
+dayjs.extend(isoWeek)
+
 export const weekdayLabels = ['Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat', 'Sun']
-export const monthLabelFormatter = new Intl.DateTimeFormat('en', { month: 'long', year: 'numeric' })
-export const dayLabelFormatter = new Intl.DateTimeFormat('en', { weekday: 'long', month: 'long', day: 'numeric', year: 'numeric' })
-export const dayShortFormatter = new Intl.DateTimeFormat('en', { month: 'short', day: 'numeric' })
-export const weekdayLongFormatter = new Intl.DateTimeFormat('en', { weekday: 'long' })
-export const weekdayShortFormatter = new Intl.DateTimeFormat('en', { weekday: 'short' })
-export const timeLabelFormatter = new Intl.DateTimeFormat('en', { hour: 'numeric' })
+export const monthLabelFormatter = {
+  format: (value) => dayjs(value).format('MMMM YYYY'),
+}
+export const dayLabelFormatter = {
+  format: (value) => dayjs(value).format('dddd, MMMM D, YYYY'),
+}
+export const dayShortFormatter = {
+  format: (value) => dayjs(value).format('MMM D'),
+}
+export const weekdayLongFormatter = {
+  format: (value) => dayjs(value).format('dddd'),
+}
+export const weekdayShortFormatter = {
+  format: (value) => dayjs(value).format('ddd'),
+}
+export const timeLabelFormatter = {
+  format: (value) => dayjs(value).format('h A'),
+}
 export const calendarHourHeight = 56
 export const fullDayCalendarBounds = {
   startHour: 0,
@@ -13,83 +32,56 @@ export const fullDayCalendarBounds = {
   totalMinutes: 24 * 60,
 }
 
+const parseWithFormats = (value, formats) => {
+  for (const format of formats) {
+    const parsed = dayjs(value, format, true)
+    if (parsed.isValid()) {
+      return parsed
+    }
+  }
+
+  const fallback = dayjs(value)
+  return fallback.isValid() ? fallback : null
+}
+
 export const parseReportDate = (value) => {
   if (!value) return null
 
-  const slashMatch = String(value).match(/^(\d{2})\/(\d{2})\/(\d{4})$/)
-  if (slashMatch) {
-    const [, day, month, year] = slashMatch
-    return new Date(Number(year), Number(month) - 1, Number(day))
-  }
-
-  const dashMatch = String(value).match(/^(\d{4})-(\d{2})-(\d{2})$/)
-  if (dashMatch) {
-    const [, year, month, day] = dashMatch
-    return new Date(Number(year), Number(month) - 1, Number(day))
-  }
-
-  const parsed = new Date(value)
-  return Number.isNaN(parsed.getTime()) ? null : parsed
+  const parsed = parseWithFormats(String(value), ['DD/MM/YYYY', 'YYYY-MM-DD'])
+  return parsed ? parsed.toDate() : null
 }
 
 export const toCalendarKey = (date) => {
-  return [
-    date.getFullYear(),
-    String(date.getMonth() + 1).padStart(2, '0'),
-    String(date.getDate()).padStart(2, '0'),
-  ].join('-')
+  return dayjs(date).format('YYYY-MM-DD')
 }
 
 export const parseReportDateTime = (value) => {
   if (!value) return null
 
-  const dateTimeMatch = String(value).match(
-    /^(\d{4})-(\d{2})-(\d{2})[ T](\d{2}):(\d{2})(?::(\d{2}))?$/
-  )
-  if (dateTimeMatch) {
-    const [, year, month, day, hour, minute, second = '00'] = dateTimeMatch
-    return new Date(
-      Number(year),
-      Number(month) - 1,
-      Number(day),
-      Number(hour),
-      Number(minute),
-      Number(second)
-    )
-  }
-
-  const parsed = new Date(value)
-  return Number.isNaN(parsed.getTime()) ? null : parsed
+  const parsed = parseWithFormats(String(value), ['YYYY-MM-DD HH:mm:ss', 'YYYY-MM-DDTHH:mm:ss'])
+  return parsed ? parsed.toDate() : null
 }
 
-export const startOfDay = (date) => new Date(date.getFullYear(), date.getMonth(), date.getDate())
+export const startOfDay = (date) => dayjs(date).startOf('day').toDate()
 
-export const addDays = (date, days) => {
-  const result = new Date(date)
-  result.setDate(result.getDate() + days)
-  return result
-}
+export const addDays = (date, days) => dayjs(date).add(days, 'day').toDate()
 
-export const startOfWeek = (date) => {
-  const result = startOfDay(date)
-  const offset = (result.getDay() + 6) % 7
-  result.setDate(result.getDate() - offset)
-  return result
-}
+export const startOfWeek = (date) => dayjs(date).startOf('isoWeek').toDate()
 
 export const clamp = (value, min, max) => Math.min(Math.max(value, min), max)
 
 export const toMinutesOfDay = (date) => {
-  return (date.getHours() * 60) + date.getMinutes() + (date.getSeconds() / 60)
+  const value = dayjs(date)
+  return (value.hour() * 60) + value.minute() + (value.second() / 60)
 }
 
 export const buildCalendarSlots = (bounds) => {
   return Array.from({ length: bounds.totalHours }, (_, index) => {
     const hour = bounds.startHour + index
-    const labelDate = new Date(2026, 0, 1, hour, 0, 0)
+    const labelDate = dayjs().year(2026).month(0).date(1).hour(hour).minute(0).second(0)
     return {
       key: `hour-${hour}`,
-      label: timeLabelFormatter.format(labelDate),
+      label: timeLabelFormatter.format(labelDate.toDate()),
       offset: index * calendarHourHeight,
     }
   })
