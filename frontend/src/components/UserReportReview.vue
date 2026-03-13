@@ -294,8 +294,9 @@
                     >
                       <v-tooltip location="top" max-width="360">
                         <template #activator="{ props: tooltipProps }">
-                          <div v-bind="tooltipProps" class="time-calendar__event-card" :style="entryStyle(item.user)">
-                            <div class="calendar-entry__user">{{ item.user }}</div>
+                          <div v-bind="tooltipProps" class="time-calendar__event-card time-calendar__event-card--daily" :style="entryStyle(item.user)">
+                            <div class="calendar-entry__time">{{ formatEntryTimeRange(item) }}</div>
+                            <div class="time-calendar__event-task">{{ truncateDescription(item.description, 72) }}</div>
                           </div>
                         </template>
                         <div class="calendar-entry-tooltip">
@@ -1339,6 +1340,7 @@ watch(filteredRows, syncFocusedDate)
 
 .time-calendar {
   overflow-x: auto;
+  overflow-y: hidden;
 }
 
 .time-calendar__header,
@@ -1381,6 +1383,7 @@ watch(filteredRows, syncFocusedDate)
   border-right: 1px solid rgba(255, 255, 255, 0.04);
   background:
     linear-gradient(to bottom, rgba(255, 255, 255, 0.03), rgba(255, 255, 255, 0.01));
+  overflow: hidden;
 }
 
 .time-calendar__hour-line {
@@ -1407,6 +1410,10 @@ watch(filteredRows, syncFocusedDate)
   overflow: hidden;
   display: flex;
   align-items: flex-start;
+}
+
+.time-calendar__event-card--daily {
+  flex-direction: column;
 }
 
 .time-calendar__event-task {
