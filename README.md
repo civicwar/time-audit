@@ -95,7 +95,7 @@ poetry run alembic upgrade head
 GitHub Actions:
 
 - `Deploy` builds the frontend, syncs code to the server, installs backend dependencies, runs migrations, and restarts the service.
-- `Create Admin` is a manual workflow that connects to the deployed server and creates or updates the `admin` user using the `ADMIN_WORKFLOW_PASSWORD` GitHub secret plus an optional `full_name` workflow input.
+- `Create Admin` is a manual workflow that connects to the deployed server, updates `.env` so it contains `TIME_AUDIT_ADMIN_PASSWORD`, and creates or updates the `admin` user using the password and optional `full_name` you provide when triggering the workflow.
 
 Authentication is now enabled.
 Only the `admin` user is created during seeding, and its password is read from `.env` via `TIME_AUDIT_ADMIN_PASSWORD`.

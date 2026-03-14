@@ -3,6 +3,10 @@ name: Create Admin
 on:
   workflow_dispatch:
     inputs:
+      admin_password:
+        description: Password to set on the admin account
+        required: true
+        type: string
       full_name:
         description: Full name for the admin account
         required: false
@@ -17,18 +21,13 @@ jobs:
       DEPLOY_USER: ${{ secrets.DEPLOY_USER }}
       DEPLOY_PATH: /opt/time-audit
       SSH_PRIVATE_KEY: ${{ secrets.DEPLOY_SSH_KEY }}
-      ADMIN_WORKFLOW_PASSWORD: ${{ secrets.ADMIN_WORKFLOW_PASSWORD }}
     steps:
       - name: Checkout
         uses: actions/checkout@v4
 
-      - name: Validate password secret
+      - name: Mask password input
         run: |
-          if [ -z "$ADMIN_WORKFLOW_PASSWORD" ]; then
-            echo "ADMIN_WORKFLOW_PASSWORD GitHub secret is required." >&2
-            exit 1
-          fi
-          echo "::add-mask::$ADMIN_WORKFLOW_PASSWORD"
+          echo "::add-mask::${{ github.event.inputs.admin_password }}"
 
       - name: Add SSH key
         run: |
@@ -43,14 +42,15 @@ jobs:
 
       - name: Create or update admin user
         run: |
-          ADMIN_PASSWORD_B64=$(printf '%s' "$ADMIN_WORKFLOW_PASSWORD" | base64 -w0)
+          ADMIN_PASSWORD_B64=$(printf '%s' '${{ github.event.inputs.admin_password }}' | base64 -w0)
           ADMIN_FULL_NAME_B64=$(printf '%s' '${{ github.event.inputs.full_name }}' | base64 -w0)
           echo "::add-mask::$ADMIN_PASSWORD_B64"
           ssh ${DEPLOY_USER}@${DEPLOY_HOST} <<EOF
           set -e
           cd ${DEPLOY_PATH}
           export TIME_AUDIT_ADMIN_PASSWORD="\$(printf '%s' '$ADMIN_PASSWORD_B64' | base64 -d)"
-          ADMIN_FULL_NAME="\$(printf '%s' '$ADMIN_FULL_NAME_B64' | base64 -d)"
+          export ADMIN_FULL_NAME="\$(printf '%s' '$ADMIN_FULL_NAME_B64' | base64 -d)"
+          sudo -E /opt/time-audit/venv/bin/python -c "from pathlib import Path; import os; env_path = Path('.env'); key = 'TIME_AUDIT_ADMIN_PASSWORD'; value = os.environ[key]; lines = env_path.read_text(encoding='utf-8').splitlines() if env_path.exists() else []; updated = any(line.startswith(f'{key}=') for line in lines); new_lines = [f'{key}={value}' if line.startswith(f'{key}=') else line for line in lines]; new_lines = new_lines if updated else new_lines + [f'{key}={value}']; env_path.write_text('\\n'.join(new_lines) + '\\n', encoding='utf-8')"
           sudo -E /opt/time-audit/venv/bin/python -m pip install --upgrade pip
           sudo -E /opt/time-audit/venv/bin/python -m pip install .
           sudo -E /opt/time-audit/venv/bin/python -m alembic upgrade head
