@@ -18,6 +18,7 @@ export const createReportReviewState = () => ({
   selectedDayKey: '',
   selectedDayItems: [],
   dayDialogOpen: false,
+  currentRunAnalysisDialogOpen: false,
   taskDialogOpen: false,
   selectedTask: null,
 })

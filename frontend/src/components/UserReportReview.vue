@@ -163,6 +163,9 @@
     <task-details-dialog
     />
 
+    <report-analysis-dialog
+    />
+
     <day-entries-dialog
     />
   </v-card>
@@ -177,6 +180,7 @@ import CalendarLegend from './user-report-review/CalendarLegend.vue'
 import CalendarMonthView from './user-report-review/CalendarMonthView.vue'
 import CalendarWeekView from './user-report-review/CalendarWeekView.vue'
 import DayEntriesDialog from './user-report-review/DayEntriesDialog.vue'
+import ReportAnalysisDialog from './user-report-review/ReportAnalysisDialog.vue'
 import ReportReviewHeader from './user-report-review/ReportReviewHeader.vue'
 import TaskDetailsDialog from './user-report-review/TaskDetailsDialog.vue'
 import { groupedReportReviewHeaders, reportReviewHeaders } from '../data/reportReviewTableHeaders'

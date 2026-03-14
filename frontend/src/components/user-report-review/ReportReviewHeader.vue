@@ -3,6 +3,14 @@
     <h2 class="text-h6">User Report Review</h2>
     <div class="d-flex align-center ga-2">
       <v-btn
+        v-if="currentRun"
+        color="primary"
+        variant="text"
+        @click="openCurrentRunAnalysisDialog"
+      >
+        Analysis
+      </v-btn>
+      <v-btn
         v-if="isAdmin && currentRun && canRefreshCurrentRun"
         color="primary"
         variant="text"
@@ -24,5 +32,5 @@ import { useReportReviewStore } from '../../stores/reportReview'
 const backHref = '/in'
 const store = useReportReviewStore()
 const { isAdmin, currentRun, canRefreshCurrentRun, refreshLoading } = storeToRefs(store)
-const { refreshCurrentSession } = store
+const { openCurrentRunAnalysisDialog, refreshCurrentSession } = store
 </script>

@@ -62,6 +62,10 @@ export const reportReviewActions = {
     this.dayDialogOpen = true
   },
 
+  openCurrentRunAnalysisDialog() {
+    this.currentRunAnalysisDialogOpen = true
+  },
+
   clearCalendarFilters() {
     if (this.calendarMode === 'week') {
       this.activeLegendUsers = this.legendUsers.length ? [this.legendUsers[0]] : []
@@ -227,7 +231,7 @@ export const reportReviewActions = {
 
   async loadCurrentRun() {
     this.currentRun = null
-    if (!this.isAdmin || !this.runDir) return
+    if (!this.runDir) return
 
     try {
       const { data } = await api.get('/api/in/runs')
