@@ -24,12 +24,12 @@ jobs:
         with:
           python-version: ${{ env.PYTHON_VERSION }}
 
-      - name: Install Python deps (runtime subset)
+      - name: Install Python deps
         run: |
           python -m venv venv
           . venv/bin/activate
           pip install --upgrade pip
-          pip install fastapi uvicorn[standard] pandas python-multipart
+          pip install .
 
       - name: Build frontend
         uses: actions/setup-node@v4
@@ -61,7 +61,11 @@ jobs:
 
       - name: Install backend dependencies on server
         run: |
-          ssh ${DEPLOY_USER}@${DEPLOY_HOST} "cd ${DEPLOY_PATH} && sudo /opt/time-audit/venv/bin/python -m pip install --upgrade fastapi uvicorn[standard] pandas python-multipart"
+          ssh ${DEPLOY_USER}@${DEPLOY_HOST} "cd ${DEPLOY_PATH} && sudo /opt/time-audit/venv/bin/python -m pip install --upgrade pip && sudo /opt/time-audit/venv/bin/python -m pip install ."
+
+      - name: Run database migrations
+        run: |
+          ssh ${DEPLOY_USER}@${DEPLOY_HOST} "cd ${DEPLOY_PATH} && sudo /opt/time-audit/venv/bin/python -m alembic upgrade head"
 
       - name: Restart service
         run: |
