@@ -35,7 +35,7 @@ import { computed } from 'vue'
 import { storeToRefs } from 'pinia'
 
 import { useReportReviewStore } from '../../stores/reportReview'
-import { reportReviewHeaders } from './tableHeaders'
+import { reportReviewHeaders } from '../../data/reportReviewTableHeaders'
 
 const store = useReportReviewStore()
 const { dayDialogOpen, dayDialogTitle, selectedDayItems } = storeToRefs(store)

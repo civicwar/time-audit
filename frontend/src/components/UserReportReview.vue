@@ -161,7 +161,7 @@ import CalendarWeekView from './user-report-review/CalendarWeekView.vue'
 import DayEntriesDialog from './user-report-review/DayEntriesDialog.vue'
 import ReportReviewHeader from './user-report-review/ReportReviewHeader.vue'
 import TaskDetailsDialog from './user-report-review/TaskDetailsDialog.vue'
-import { groupedReportReviewHeaders, reportReviewHeaders } from './user-report-review/tableHeaders'
+import { groupedReportReviewHeaders, reportReviewHeaders } from '../data/reportReviewTableHeaders'
 import { useReportReviewStore } from '../stores/reportReview'
 
 const props = defineProps({
