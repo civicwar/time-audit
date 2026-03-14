@@ -7,7 +7,7 @@
         color="primary"
         variant="text"
         :loading="refreshLoading"
-        @click="$emit('refresh')"
+        @click="refreshCurrentSession"
       >
         Refresh
       </v-btn>
@@ -17,13 +17,12 @@
 </template>
 
 <script setup>
-defineProps({
-  isAdmin: { type: Boolean, default: false },
-  currentRun: { type: Object, default: null },
-  canRefreshCurrentRun: { type: Boolean, default: false },
-  refreshLoading: { type: Boolean, default: false },
-  backHref: { type: String, required: true },
-})
+import { storeToRefs } from 'pinia'
 
-defineEmits(['refresh'])
+import { useReportReviewStore } from '../../stores/reportReview'
+
+const backHref = '/in'
+const store = useReportReviewStore()
+const { isAdmin, currentRun, canRefreshCurrentRun, refreshLoading } = storeToRefs(store)
+const { refreshCurrentSession } = store
 </script>

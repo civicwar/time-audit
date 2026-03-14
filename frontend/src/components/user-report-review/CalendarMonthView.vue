@@ -27,7 +27,7 @@
           'calendar-day--selected': selectedDayKey === day.key,
           'calendar-day--clickable': day.items.length,
         }"
-        @click="$emit('select-day', day)"
+        @click="selectCalendarDay(day)"
       >
         <div class="calendar-day__header">
           <span class="text-caption">{{ day.label }}</span>
@@ -47,7 +47,7 @@
                 type="button"
                 class="calendar-day__list-item"
                 :style="entryStyle(item.user)"
-                @click.stop="$emit('open-task', item)"
+                @click.stop="openTaskDialog(item)"
               >
                 <div class="calendar-day__list-task">{{ truncateDescription(item.description, 40) }}</div>
                 <div class="calendar-day__list-meta">
@@ -70,17 +70,14 @@
 </template>
 
 <script setup>
-defineProps({
-  calendarMonths: { type: Array, required: true },
-  weekdayLabels: { type: Array, required: true },
-  selectedDayKey: { type: String, required: true },
-  isTodayKey: { type: Function, required: true },
-  entryStyle: { type: Function, required: true },
-  truncateDescription: { type: Function, required: true },
-  formatEntryTimeRange: { type: Function, required: true },
-})
+import { storeToRefs } from 'pinia'
 
-defineEmits(['select-day', 'open-task'])
+import { useReportReviewStore } from '../../stores/reportReview'
+import { weekdayLabels } from '../../utils/calendarUtils'
+
+const store = useReportReviewStore()
+const { calendarMonths, selectedDayKey } = storeToRefs(store)
+const { isTodayKey, entryStyle, truncateDescription, formatEntryTimeRange, selectCalendarDay, openTaskDialog } = store
 </script>
 
 <style scoped>

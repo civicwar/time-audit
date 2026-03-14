@@ -9,13 +9,13 @@
           color="primary"
           density="comfortable"
           mandatory
-          @update:model-value="$emit('update:calendarMode', $event)"
+          @update:model-value="setCalendarMode"
         >
           <v-btn value="month">Monthly</v-btn>
           <v-btn value="week">Weekly</v-btn>
           <v-btn value="day">Daily</v-btn>
         </v-btn-toggle>
-        <v-btn v-if="activeLegendUsers.length" variant="text" size="small" @click="$emit('clear-filters')">
+        <v-btn v-if="activeLegendUsers.length" variant="text" size="small" @click="clearCalendarFilters">
           Clear filters
         </v-btn>
       </div>
@@ -27,7 +27,7 @@
         type="button"
         class="calendar-legend__item"
         :class="{ 'calendar-legend__item--active': activeLegendUsers.includes(user) }"
-        @click="$emit('toggle-user', user)"
+        @click="toggleLegendUser(user)"
       >
         <span class="calendar-legend__swatch" :style="entryStyle(user)" />
         <span class="text-body-2">{{ user }}</span>
@@ -37,15 +37,13 @@
 </template>
 
 <script setup>
-defineProps({
-  legendUsers: { type: Array, required: true },
-  activeLegendUsers: { type: Array, required: true },
-  viewMode: { type: String, required: true },
-  calendarMode: { type: String, required: true },
-  entryStyle: { type: Function, required: true },
-})
+import { storeToRefs } from 'pinia'
 
-defineEmits(['update:calendarMode', 'toggle-user', 'clear-filters'])
+import { useReportReviewStore } from '../../stores/reportReview'
+
+const store = useReportReviewStore()
+const { legendUsers, activeLegendUsers, viewMode, calendarMode } = storeToRefs(store)
+const { entryStyle, toggleLegendUser, setCalendarMode, clearCalendarFilters } = store
 </script>
 
 <style scoped>

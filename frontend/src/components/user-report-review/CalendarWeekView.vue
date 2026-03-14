@@ -16,9 +16,9 @@
               :class="{ 'time-calendar__column-header--today': isTodayKey(column.key) }"
               role="button"
               tabindex="0"
-              @click="$emit('select-day', column.key)"
-              @keydown.enter.prevent="$emit('select-day', column.key)"
-              @keydown.space.prevent="$emit('select-day', column.key)"
+              @click="openDayView(column.key)"
+              @keydown.enter.prevent="openDayView(column.key)"
+              @keydown.space.prevent="openDayView(column.key)"
             >
               <div class="text-caption text-medium-emphasis">{{ column.weekdayLabel }}</div>
               <div class="text-subtitle-2">{{ column.label }}</div>
@@ -59,7 +59,7 @@
             type="button"
             class="time-calendar__event"
             :style="calendarEventStyle(item, bounds)"
-            @click="$emit('open-task', item)"
+              @click="openTaskDialog(item)"
           >
             <v-tooltip location="top" max-width="360">
               <template #activator="{ props: tooltipProps }">
@@ -84,21 +84,21 @@
 </template>
 
 <script setup>
-defineProps({
-  columns: { type: Array, required: true },
-  gridStyle: { type: Object, required: true },
-  slots: { type: Array, required: true },
-  lines: { type: Array, required: true },
-  height: { type: Number, required: true },
-  bounds: { type: Object, required: true },
-  calendarHourHeight: { type: Number, required: true },
-  isTodayKey: { type: Function, required: true },
-  entryStyle: { type: Function, required: true },
-  formatEntryTimeRange: { type: Function, required: true },
-  calendarEventStyle: { type: Function, required: true },
-})
+import { storeToRefs } from 'pinia'
 
-defineEmits(['open-task', 'select-day'])
+import { useReportReviewStore } from '../../stores/reportReview'
+import { calendarHourHeight } from '../../utils/calendarUtils'
+
+const store = useReportReviewStore()
+const {
+  weekCalendarColumns: columns,
+  weekCalendarGridStyle: gridStyle,
+  weekCalendarSlots: slots,
+  weekCalendarLines: lines,
+  weekCalendarHeight: height,
+  weekCalendarBounds: bounds,
+} = storeToRefs(store)
+const { isTodayKey, entryStyle, formatEntryTimeRange, calendarEventStyle, openTaskDialog, openDayView } = store
 </script>
 
 <style scoped>

@@ -1,12 +1,6 @@
 <template>
   <v-card elevation="2" class="pa-4">
     <report-review-header
-      :is-admin="isAdmin"
-      :current-run="currentRun"
-      :can-refresh-current-run="canRefreshCurrentRun"
-      :refresh-loading="refreshLoading"
-      :back-href="backHref"
-      @refresh="refreshCurrentSession"
     />
 
     <v-alert
@@ -63,14 +57,6 @@
       </div>
 
       <calendar-legend
-        :legend-users="legendUsers"
-        :active-legend-users="activeLegendUsers"
-        :view-mode="viewMode"
-        :calendar-mode="calendarMode"
-        :entry-style="entryStyle"
-        @update:calendar-mode="setCalendarMode"
-        @toggle-user="toggleLegendUser"
-        @clear-filters="clearCalendarFilters"
       />
 
       <div v-if="viewMode === 'calendar'">
@@ -87,52 +73,13 @@
 
         <calendar-month-view
           v-if="calendarMode === 'month'"
-          :calendar-months="calendarMonths"
-          :weekday-labels="weekdayLabels"
-          :selected-day-key="selectedDayKey"
-          :is-today-key="isTodayKey"
-          :entry-style="entryStyle"
-          :truncate-description="truncateDescription"
-          :format-entry-time-range="formatEntryTimeRange"
-          @select-day="selectCalendarDay"
-          @open-task="openTaskDialog"
         />
 
         <calendar-week-view
           v-else-if="calendarMode === 'week'"
-          :columns="weekCalendarColumns"
-          :grid-style="weekCalendarGridStyle"
-          :slots="weekCalendarSlots"
-          :lines="weekCalendarLines"
-          :height="weekCalendarHeight"
-          :bounds="weekCalendarBounds"
-          :calendar-hour-height="calendarHourHeight"
-          :is-today-key="isTodayKey"
-          :entry-style="entryStyle"
-          :format-entry-time-range="formatEntryTimeRange"
-          :calendar-event-style="calendarEventStyle"
-          @open-task="openTaskDialog"
-          @select-day="openDayView"
         />
 
-        <calendar-day-view
-          v-else
-          :columns="dayCalendarColumns"
-          :weekday-label="dayViewWeekdayLabel"
-          :period-label="calendarPeriodLabel"
-          :entry-count="dayEntries.length"
-          :grid-style="dayCalendarGridStyle"
-          :slots="dayCalendarSlots"
-          :lines="dayCalendarLines"
-          :height="dayCalendarHeight"
-          :bounds="dayCalendarBounds"
-          :calendar-hour-height="calendarHourHeight"
-          :entry-style="entryStyle"
-          :format-entry-time-range="formatEntryTimeRange"
-          :truncate-description="truncateDescription"
-          :calendar-event-style="calendarEventStyle"
-          @open-task="openTaskDialog"
-        />
+        <calendar-day-view v-else />
 
         <div class="d-flex align-center justify-space-between mb-2">
           <div class="text-body-2 text-medium-emphasis">
@@ -196,17 +143,9 @@
     </div>
 
     <task-details-dialog
-      v-model="taskDialogOpen"
-      :selected-task="selectedTask"
     />
 
     <day-entries-dialog
-      v-model="dayDialogOpen"
-      :title="dayDialogTitle"
-      :headers="headers"
-      :items="selectedDayItems"
-      :truncate-description="truncateDescription"
-      @open-task="openTaskDialog"
     />
   </v-card>
 </template>
@@ -222,8 +161,8 @@ import CalendarWeekView from './user-report-review/CalendarWeekView.vue'
 import DayEntriesDialog from './user-report-review/DayEntriesDialog.vue'
 import ReportReviewHeader from './user-report-review/ReportReviewHeader.vue'
 import TaskDetailsDialog from './user-report-review/TaskDetailsDialog.vue'
+import { groupedReportReviewHeaders, reportReviewHeaders } from './user-report-review/tableHeaders'
 import { useReportReviewStore } from '../stores/reportReview'
-import { calendarHourHeight, weekdayLabels } from '../utils/calendarUtils'
 
 const props = defineProps({
   reportPath: {
@@ -236,87 +175,37 @@ const props = defineProps({
   },
 })
 
-const backHref = '/in'
 const store = useReportReviewStore()
 
 const {
   loading,
   error,
-  currentRun,
-  refreshLoading,
   viewMode,
   calendarMode,
   listGroupByDate,
-  activeLegendUsers,
-  selectedDayKey,
-  selectedDayItems,
-  dayDialogOpen,
-  taskDialogOpen,
-  selectedTask,
-  isAdmin,
-  canRefreshCurrentRun,
   filteredRows,
   showSelectedDownloadButton,
   canDownloadSelectedReport,
   downloadSelectedButtonText,
   canDownloadAllReportsZip,
   listDateGroups,
-  legendUsers,
   showTodayShortcut,
-  dayDialogTitle,
-  dayViewWeekdayLabel,
-  weekCalendarColumns,
-  weekCalendarGridStyle,
-  weekCalendarSlots,
-  weekCalendarLines,
-  weekCalendarHeight,
-  weekCalendarBounds,
-  dayEntries,
-  dayCalendarColumns,
-  dayCalendarGridStyle,
-  dayCalendarSlots,
-  dayCalendarLines,
-  dayCalendarHeight,
-  dayCalendarBounds,
-  calendarMonths,
   calendarPeriodLabel,
 } = storeToRefs(store)
 
 const {
-  toggleLegendUser,
-  setCalendarMode,
-  selectCalendarDay,
-  clearCalendarFilters,
   truncateDescription,
   openTaskDialog,
-  formatEntryTimeRange,
-  calendarEventStyle,
   shiftCalendarPeriod,
   jumpCalendarToToday,
-  openDayView,
-  entryStyle,
-  isTodayKey,
   downloadSelectedReport,
   downloadAllReportsZip,
-  refreshCurrentSession,
   syncContext,
   resetStore,
 } = store
 
-const headers = [
-  { title: 'User', key: 'user' },
-  { title: 'Date', key: 'date' },
-  { title: 'Task', key: 'description' },
-  { title: 'Duration (h)', key: 'duration' },
-  { title: 'Duration', key: 'duration_hm' },
-]
-
-const groupedHeaders = [
-  { title: 'User', key: 'user' },
-  { title: 'Task', key: 'description' },
-  { title: 'Duration (h)', key: 'duration' },
-  { title: 'Duration', key: 'duration_hm' },
-]
+const headers = reportReviewHeaders
+const groupedHeaders = groupedReportReviewHeaders
 
 watch(
   () => [props.reportPath, props.user],

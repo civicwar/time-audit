@@ -1,5 +1,5 @@
 <template>
-  <v-dialog :model-value="modelValue" max-width="720" @update:model-value="$emit('update:modelValue', $event)">
+  <v-dialog :model-value="dialogOpen" max-width="720" @update:model-value="dialogOpen = $event">
     <v-card>
       <v-card-title>Task Details</v-card-title>
       <v-card-text v-if="selectedTask">
@@ -10,17 +10,24 @@
       </v-card-text>
       <v-card-actions>
         <v-spacer />
-        <v-btn variant="text" @click="$emit('update:modelValue', false)">Close</v-btn>
+        <v-btn variant="text" @click="dialogOpen = false">Close</v-btn>
       </v-card-actions>
     </v-card>
   </v-dialog>
 </template>
 
 <script setup>
-defineProps({
-  modelValue: { type: Boolean, required: true },
-  selectedTask: { type: Object, default: null },
-})
+import { computed } from 'vue'
+import { storeToRefs } from 'pinia'
 
-defineEmits(['update:modelValue'])
+import { useReportReviewStore } from '../../stores/reportReview'
+
+const store = useReportReviewStore()
+const { taskDialogOpen, selectedTask } = storeToRefs(store)
+const dialogOpen = computed({
+  get: () => taskDialogOpen.value,
+  set: (value) => {
+    taskDialogOpen.value = value
+  },
+})
 </script>
