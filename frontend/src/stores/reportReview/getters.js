@@ -35,11 +35,23 @@ export const reportReviewGetters = {
 
   userFilteredRows: (state) => state.rows,
 
+  effectiveLegendUsers() {
+    if (this.calendarMode !== 'week') {
+      return this.activeLegendUsers
+    }
+
+    if (this.activeLegendUsers.length) {
+      return [this.activeLegendUsers[0]]
+    }
+
+    return this.legendUsers.length ? [this.legendUsers[0]] : []
+  },
+
   calendarRows() {
-    if (!this.activeLegendUsers.length) {
+    if (!this.effectiveLegendUsers.length) {
       return this.userFilteredRows
     }
-    return this.userFilteredRows.filter((row) => this.activeLegendUsers.includes(row.user))
+    return this.userFilteredRows.filter((row) => this.effectiveLegendUsers.includes(row.user))
   },
 
   filteredRows() {
@@ -47,7 +59,7 @@ export const reportReviewGetters = {
   },
 
   selectedReportUsers(state) {
-    return state.activeLegendUsers.filter((user) => state.reportFiles.some((rf) => rf.user === user))
+    return this.effectiveLegendUsers.filter((user) => state.reportFiles.some((rf) => rf.user === user))
   },
 
   selectedReportFile() {
@@ -128,6 +140,26 @@ export const reportReviewGetters = {
     return parsedDates.every((date) => date.getFullYear() === currentYear && date.getMonth() === currentMonth)
   },
 
+  reportDateBounds(state) {
+    const timestamps = state.rows.flatMap((row) => {
+      const values = []
+      if (row.startDateTime instanceof Date) values.push(row.startDateTime.getTime())
+      if (row.endDateTime instanceof Date) values.push(row.endDateTime.getTime())
+      const parsedDate = parseReportDate(row.date)
+      if (parsedDate instanceof Date) values.push(parsedDate.getTime())
+      return values.filter((value) => Number.isFinite(value))
+    })
+
+    if (!timestamps.length) {
+      return null
+    }
+
+    return {
+      start: startOfDay(new Date(Math.min(...timestamps))),
+      end: startOfDay(new Date(Math.max(...timestamps))),
+    }
+  },
+
   availableDateKeys() {
     return Array.from(
       new Set(
@@ -141,6 +173,32 @@ export const reportReviewGetters = {
   focusedDate(state) {
     const parsed = parseReportDate(state.focusedDateKey)
     return parsed ? startOfDay(parsed) : null
+  },
+
+  currentCalendarPeriodStart() {
+    if (!this.focusedDate) return null
+    if (this.calendarMode === 'week') {
+      return startOfWeek(this.focusedDate)
+    }
+    return startOfDay(this.focusedDate)
+  },
+
+  currentCalendarPeriodEnd() {
+    if (!this.focusedDate) return null
+    if (this.calendarMode === 'week') {
+      return startOfDay(addDays(startOfWeek(this.focusedDate), 6))
+    }
+    return startOfDay(this.focusedDate)
+  },
+
+  canShiftCalendarPrevious() {
+    if (!this.reportDateBounds || !this.currentCalendarPeriodStart) return false
+    return this.currentCalendarPeriodStart.getTime() > this.reportDateBounds.start.getTime()
+  },
+
+  canShiftCalendarNext() {
+    if (!this.reportDateBounds || !this.currentCalendarPeriodEnd) return false
+    return this.currentCalendarPeriodEnd.getTime() < this.reportDateBounds.end.getTime()
   },
 
   selectedDayLabel(state) {

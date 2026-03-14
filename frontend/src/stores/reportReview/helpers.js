@@ -36,6 +36,7 @@ export const buildFlatRows = (reportResponses) => {
           user,
           date,
           description: task.description,
+          tags: Array.isArray(task.tags) ? task.tags : [],
           duration: task.duration,
           duration_hm: task.duration_hm,
           startTime: task.start_time || '',

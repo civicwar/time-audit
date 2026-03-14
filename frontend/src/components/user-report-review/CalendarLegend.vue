@@ -15,7 +15,7 @@
           <v-btn value="week">Weekly</v-btn>
           <v-btn value="day">Daily</v-btn>
         </v-btn-toggle>
-        <v-btn v-if="activeLegendUsers.length" variant="text" size="small" @click="clearCalendarFilters">
+        <v-btn v-if="showClearFilters" variant="text" size="small" @click="clearCalendarFilters">
           Clear filters
         </v-btn>
       </div>
@@ -26,7 +26,7 @@
         :key="user"
         type="button"
         class="calendar-legend__item"
-        :class="{ 'calendar-legend__item--active': activeLegendUsers.includes(user) }"
+        :class="{ 'calendar-legend__item--active': effectiveLegendUsers.includes(user) }"
         @click="toggleLegendUser(user)"
       >
         <span class="calendar-legend__swatch" :style="entryStyle(user)" />
@@ -37,13 +37,20 @@
 </template>
 
 <script setup>
+import { computed } from 'vue'
 import { storeToRefs } from 'pinia'
 
 import { useReportReviewStore } from '../../stores/reportReview'
 
 const store = useReportReviewStore()
-const { legendUsers, activeLegendUsers, viewMode, calendarMode } = storeToRefs(store)
+const { legendUsers, activeLegendUsers, effectiveLegendUsers, viewMode, calendarMode } = storeToRefs(store)
 const { entryStyle, toggleLegendUser, setCalendarMode, clearCalendarFilters } = store
+const showClearFilters = computed(() => {
+  if (calendarMode.value === 'week') {
+    return false
+  }
+  return activeLegendUsers.value.length > 0
+})
 </script>
 
 <style scoped>

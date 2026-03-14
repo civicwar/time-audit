@@ -56,6 +56,11 @@
               <v-tooltip location="top" max-width="360">
                 <template #activator="{ props: tooltipProps }">
                   <div v-bind="tooltipProps" class="time-calendar__event-card time-calendar__event-card--daily" :style="entryStyle(item.user)">
+                    <div v-if="item.tags?.length" class="calendar-entry__tags">
+                      <span v-for="tag in item.tags" :key="`${item.id}-${tag}`" class="calendar-entry__tag">
+                        {{ tag }}
+                      </span>
+                    </div>
                     <div class="calendar-entry__time">{{ formatEntryTimeRange(item) }}</div>
                     <div class="time-calendar__event-task">{{ truncateDescription(item.description, 72) }}</div>
                   </div>
@@ -63,6 +68,7 @@
                 <div class="calendar-entry-tooltip">
                   <div class="calendar-entry-tooltip__user">{{ item.user }}</div>
                   <div>{{ item.description }}</div>
+                  <div v-if="item.tags?.length">Tags: {{ item.tags.join(', ') }}</div>
                   <div>{{ formatEntryTimeRange(item) }}</div>
                   <div>Total: {{ item.duration_hm }}</div>
                   <div v-if="item.endDate && item.endDate !== item.date">Ends {{ item.endDate }}</div>
@@ -108,6 +114,30 @@ const { entryStyle, formatEntryTimeRange, truncateDescription, calendarEventStyl
 .calendar-entry__time {
   font-size: 0.75rem;
   opacity: 0.9;
+  white-space: nowrap;
+}
+
+.calendar-entry__tags {
+  position: absolute;
+  top: 8px;
+  right: 10px;
+  display: flex;
+  flex-wrap: wrap;
+  justify-content: flex-end;
+  gap: 4px;
+  max-width: calc(100% - 20px);
+}
+
+.calendar-entry__tag {
+  display: inline-flex;
+  align-items: center;
+  padding: 2px 6px;
+  border-radius: 999px;
+  background: rgba(128, 128, 128, 0.28);
+  border: 1px solid rgba(255, 255, 255, 0.14);
+  color: rgba(255, 255, 255, 0.92);
+  font-size: 0.6875rem;
+  line-height: 1.1;
   white-space: nowrap;
 }
 
@@ -195,7 +225,9 @@ const { entryStyle, formatEntryTimeRange, truncateDescription, calendarEventStyl
 }
 
 .time-calendar__event-card--daily {
+  position: relative;
   flex-direction: column;
+  padding-right: 84px;
 }
 
 .time-calendar__event-task {

@@ -1,9 +1,24 @@
 import api, { getStoredSession } from '../../services/api'
-import { addDays, calendarHourHeight, clamp, sortedRowsByTime, toCalendarKey } from '../../utils/calendarUtils'
+import { addDays, calendarHourHeight, clamp, sortedRowsByTime, startOfDay, toCalendarKey } from '../../utils/calendarUtils'
 import { buildFlatRows, downloadBlob, todayKey, userColorPalette } from './helpers'
 import { clearSelectionState, resetStoreState } from './mutations'
 
 export const reportReviewActions = {
+  clampDateToReportRange(date) {
+    if (!date || !this.reportDateBounds) {
+      return date
+    }
+
+    const normalizedDate = startOfDay(date)
+    if (normalizedDate.getTime() < this.reportDateBounds.start.getTime()) {
+      return this.reportDateBounds.start
+    }
+    if (normalizedDate.getTime() > this.reportDateBounds.end.getTime()) {
+      return this.reportDateBounds.end
+    }
+    return normalizedDate
+  },
+
   entryStyle(user) {
     const palette = this.colorByUser[user] || userColorPalette[0]
     return {
@@ -18,6 +33,11 @@ export const reportReviewActions = {
   },
 
   toggleLegendUser(user) {
+    if (this.calendarMode === 'week') {
+      this.activeLegendUsers = [user]
+      return
+    }
+
     this.activeLegendUsers = this.activeLegendUsers.includes(user)
       ? this.activeLegendUsers.filter((item) => item !== user)
       : [...this.activeLegendUsers, user]
@@ -25,6 +45,13 @@ export const reportReviewActions = {
 
   setCalendarMode(mode) {
     this.calendarMode = mode
+    if (mode === 'week') {
+      this.activeLegendUsers = this.effectiveLegendUsers.length
+        ? [this.effectiveLegendUsers[0]]
+        : this.legendUsers.length
+          ? [this.legendUsers[0]]
+          : []
+    }
   },
 
   selectCalendarDay(day) {
@@ -36,6 +63,11 @@ export const reportReviewActions = {
   },
 
   clearCalendarFilters() {
+    if (this.calendarMode === 'week') {
+      this.activeLegendUsers = this.legendUsers.length ? [this.legendUsers[0]] : []
+      return
+    }
+
     this.activeLegendUsers = []
   },
 
@@ -87,16 +119,29 @@ export const reportReviewActions = {
 
   shiftCalendarPeriod(direction) {
     if (!this.focusedDate) return
+    if (direction < 0 && !this.canShiftCalendarPrevious) return
+    if (direction > 0 && !this.canShiftCalendarNext) return
     const offset = this.calendarMode === 'week' ? direction * 7 : direction
-    this.focusedDateKey = toCalendarKey(addDays(this.focusedDate, offset))
+    const targetDate = this.clampDateToReportRange(addDays(this.focusedDate, offset))
+    this.focusedDateKey = toCalendarKey(targetDate)
   },
 
   jumpCalendarToToday() {
-    this.focusedDateKey = todayKey
+    const todayDate = this.clampDateToReportRange(new Date())
+    if (!todayDate) return
+    this.focusedDateKey = toCalendarKey(todayDate)
+  },
+
+  setFocusedCalendarDate(value) {
+    if (!value) return
+
+    const targetDate = this.clampDateToReportRange(new Date(value))
+    if (!targetDate) return
+    this.focusedDateKey = toCalendarKey(targetDate)
   },
 
   openDayView(dayKey) {
-    this.focusedDateKey = dayKey
+    this.setFocusedCalendarDate(dayKey)
     this.calendarMode = 'day'
   },
 
@@ -134,6 +179,9 @@ export const reportReviewActions = {
       clearSelectionState(this.$state)
       if (this.selectedUser) {
         this.activeLegendUsers = flatRows.some((row) => row.user === this.selectedUser) ? [this.selectedUser] : []
+      }
+      if (this.calendarMode === 'week' && !this.activeLegendUsers.length) {
+        this.activeLegendUsers = this.legendUsers.length ? [this.legendUsers[0]] : []
       }
       this.syncFocusedDate()
     } catch (requestError) {

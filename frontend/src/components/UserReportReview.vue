@@ -62,13 +62,31 @@
       <div v-if="viewMode === 'calendar'">
         <div v-if="calendarMode !== 'month'" class="d-flex flex-wrap align-center justify-end ga-2 mb-4">
           <div class="text-body-2 text-medium-emphasis me-auto">{{ calendarPeriodLabel }}</div>
-          <v-btn icon="mdi-chevron-left" variant="text" @click="shiftCalendarPeriod(-1)" />
+          <v-btn icon="mdi-chevron-left" variant="text" :disabled="!canShiftCalendarPrevious" @click="shiftCalendarPeriod(-1)" />
+          <v-menu v-model="calendarPickerOpen" :close-on-content-click="false" location="bottom">
+            <template #activator="{ props: menuProps }">
+              <v-tooltip :text="`Go to ${calendarMode === 'week' ? 'week' : 'day'}`" location="top">
+                <template #activator="{ props: tooltipProps }">
+                  <v-btn v-bind="{ ...menuProps, ...tooltipProps }" icon="mdi-calendar-month" variant="text" />
+                </template>
+              </v-tooltip>
+            </template>
+            <v-card min-width="320">
+              <v-date-picker
+                :model-value="calendarPickerValue"
+                :min="calendarPickerMin"
+                :max="calendarPickerMax"
+                show-adjacent-months
+                @update:model-value="handleCalendarPickerUpdate"
+              />
+            </v-card>
+          </v-menu>
           <v-tooltip v-if="showTodayShortcut" text="Today" location="top">
             <template #activator="{ props: tooltipProps }">
               <v-btn v-bind="tooltipProps" icon="mdi-calendar-today" variant="text" @click="jumpCalendarToToday" />
             </template>
           </v-tooltip>
-          <v-btn icon="mdi-chevron-right" variant="text" @click="shiftCalendarPeriod(1)" />
+          <v-btn icon="mdi-chevron-right" variant="text" :disabled="!canShiftCalendarNext" @click="shiftCalendarPeriod(1)" />
         </div>
 
         <calendar-month-view
@@ -151,7 +169,7 @@
 </template>
 
 <script setup>
-import { onUnmounted, watch } from 'vue'
+import { computed, onUnmounted, ref, watch } from 'vue'
 import { storeToRefs } from 'pinia'
 
 import CalendarDayView from './user-report-review/CalendarDayView.vue'
@@ -176,12 +194,14 @@ const props = defineProps({
 })
 
 const store = useReportReviewStore()
+const calendarPickerOpen = ref(false)
 
 const {
   loading,
   error,
   viewMode,
   calendarMode,
+  focusedDateKey,
   listGroupByDate,
   filteredRows,
   showSelectedDownloadButton,
@@ -191,6 +211,9 @@ const {
   listDateGroups,
   showTodayShortcut,
   calendarPeriodLabel,
+  canShiftCalendarPrevious,
+  canShiftCalendarNext,
+  reportDateBounds,
 } = storeToRefs(store)
 
 const {
@@ -198,6 +221,7 @@ const {
   openTaskDialog,
   shiftCalendarPeriod,
   jumpCalendarToToday,
+  setFocusedCalendarDate,
   downloadSelectedReport,
   downloadAllReportsZip,
   syncContext,
@@ -206,6 +230,19 @@ const {
 
 const headers = reportReviewHeaders
 const groupedHeaders = groupedReportReviewHeaders
+const calendarPickerValue = computed({
+  get: () => focusedDateKey.value || null,
+  set: (value) => {
+    setFocusedCalendarDate(value)
+  },
+})
+const calendarPickerMin = computed(() => reportDateBounds.value?.start ? reportDateBounds.value.start.toISOString().slice(0, 10) : undefined)
+const calendarPickerMax = computed(() => reportDateBounds.value?.end ? reportDateBounds.value.end.toISOString().slice(0, 10) : undefined)
+
+const handleCalendarPickerUpdate = (value) => {
+  calendarPickerValue.value = Array.isArray(value) ? value[0] : value
+  calendarPickerOpen.value = false
+}
 
 watch(
   () => [props.reportPath, props.user],

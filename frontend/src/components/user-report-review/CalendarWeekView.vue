@@ -63,13 +63,19 @@
           >
             <v-tooltip location="top" max-width="360">
               <template #activator="{ props: tooltipProps }">
-                <div v-bind="tooltipProps" class="time-calendar__event-card" :style="entryStyle(item.user)">
+                <div v-bind="tooltipProps" class="time-calendar__event-card time-calendar__event-card--weekly" :style="entryStyle(item.user)">
+                  <div v-if="item.tags?.length" class="calendar-entry__tags">
+                    <span v-for="tag in item.tags.slice(0, 2)" :key="`${item.id}-${tag}`" class="calendar-entry__tag">
+                      {{ tag }}
+                    </span>
+                  </div>
                   <div class="calendar-entry__user">{{ item.user }}</div>
                 </div>
               </template>
               <div class="calendar-entry-tooltip">
                 <div class="calendar-entry-tooltip__user">{{ item.user }}</div>
                 <div>{{ item.description }}</div>
+                <div v-if="item.tags?.length">Tags: {{ item.tags.join(', ') }}</div>
                 <div>{{ formatEntryTimeRange(item) }}</div>
                 <div>Total: {{ item.duration_hm }}</div>
                 <div v-if="item.endDate && item.endDate !== item.date">Ends {{ item.endDate }}</div>
@@ -106,6 +112,37 @@ const { isTodayKey, entryStyle, formatEntryTimeRange, calendarEventStyle, openTa
   font-size: 0.75rem;
   font-weight: 700;
   margin-bottom: 2px;
+}
+
+.calendar-entry__tags {
+  position: absolute;
+  top: 8px;
+  right: 10px;
+  display: flex;
+  flex-wrap: wrap;
+  justify-content: flex-end;
+  gap: 4px;
+  max-width: calc(100% - 20px);
+}
+
+.time-calendar__event-card--weekly {
+  position: relative;
+  flex-direction: column;
+  width: 100%;
+  padding-right: 84px;
+}
+
+.calendar-entry__tag {
+  display: inline-flex;
+  align-items: center;
+  padding: 2px 6px;
+  border-radius: 999px;
+  background: rgba(128, 128, 128, 0.28);
+  border: 1px solid rgba(255, 255, 255, 0.14);
+  color: rgba(255, 255, 255, 0.92);
+  font-size: 0.6875rem;
+  line-height: 1.1;
+  white-space: nowrap;
 }
 
 .calendar-entry-tooltip {

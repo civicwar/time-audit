@@ -85,6 +85,7 @@ class ClockifyClient:
         tzinfo = self._get_timezone(timezone_name)
         profile = await self.get_profile()
         user_map = await self._fetch_workspace_users(profile.workspace_id)
+        tag_map = await self._fetch_workspace_tags(profile.workspace_id)
         start_utc, end_utc = self._date_range_to_utc(start_date, end_date, tzinfo)
 
         rows: list[dict[str, Any]] = []
@@ -114,7 +115,7 @@ class ClockifyClient:
                         json=payload,
                     )
                     page_entries = self._extract_entries(data)
-                    rows.extend(self._entries_to_rows(page_entries, user_map, tzinfo))
+                    rows.extend(self._entries_to_rows(page_entries, user_map, tag_map, tzinfo))
                     if len(page_entries) < page_size:
                         break
                     page += 1
@@ -127,7 +128,7 @@ class ClockifyClient:
                     end_utc=end_utc,
                     fallback_user_id=profile.user_id,
                 )
-                rows = self._entries_to_rows(fallback_entries, user_map, tzinfo)
+                rows = self._entries_to_rows(fallback_entries, user_map, tag_map, tzinfo)
 
         if not rows:
             raise ClockifyClientError("Clockify returned no time entries for the selected date range.")
@@ -195,6 +196,31 @@ class ClockifyClient:
                 page += 1
         return users
 
+    async def _fetch_workspace_tags(self, workspace_id: str) -> dict[str, str]:
+        tags: dict[str, str] = {}
+        page = 1
+        page_size = 200
+        async with self._get_client() as client:
+            while True:
+                response = await client.get(
+                    f"{self._api_base_url}/workspaces/{workspace_id}/tags",
+                    params={"page": page, "page-size": page_size},
+                )
+                data = self._parse_json_response(response)
+                if not isinstance(data, list):
+                    raise ClockifyClientError("Clockify returned an unexpected workspace tags response format.")
+
+                for tag in data:
+                    tag_id = tag.get("id")
+                    tag_name = tag.get("name")
+                    if tag_id and tag_name:
+                        tags[tag_id] = tag_name
+
+                if response.headers.get("Last-Page", "true").lower() == "true" or len(data) < page_size:
+                    break
+                page += 1
+        return tags
+
     @staticmethod
     def _extract_entries(data: dict[str, Any]) -> list[dict[str, Any]]:
         for key in ("timeentries", "timeEntries", "time_entries"):
@@ -211,6 +237,7 @@ class ClockifyClient:
             fieldnames=[
                 "User",
                 "Description",
+                "Tags",
                 "Start Date",
                 "Start Time",
                 "End Date",
@@ -226,6 +253,7 @@ class ClockifyClient:
         self,
         entries: list[dict[str, Any]],
         user_map: dict[str, str],
+        tag_map: dict[str, str],
         tzinfo: ZoneInfo,
     ) -> list[dict[str, Any]]:
         rows: list[dict[str, Any]] = []
@@ -248,10 +276,12 @@ class ClockifyClient:
                 or user_map.get(entry.get("userId", ""))
                 or "Unknown User"
             )
+            tag_names = self._extract_tag_names(entry, tag_map)
             rows.append(
                 {
                     "User": user_name,
                     "Description": entry.get("description") or "",
+                    "Tags": ", ".join(tag_names),
                     "Start Date": start_dt.strftime("%d/%m/%Y"),
                     "Start Time": start_dt.strftime("%H:%M:%S"),
                     "End Date": end_dt.strftime("%d/%m/%Y"),
@@ -260,6 +290,39 @@ class ClockifyClient:
                 }
             )
         return rows
+
+    @staticmethod
+    def _extract_tag_names(entry: dict[str, Any], tag_map: dict[str, str]) -> list[str]:
+        resolved_names: list[str] = []
+
+        raw_tags = entry.get("tags") or entry.get("tagIds") or entry.get("tag_ids") or []
+        if isinstance(raw_tags, str):
+            raw_tags = [raw_tags]
+
+        for raw_tag in raw_tags:
+            if isinstance(raw_tag, str):
+                resolved_names.append(tag_map.get(raw_tag, raw_tag))
+                continue
+
+            if isinstance(raw_tag, dict):
+                tag_name = raw_tag.get("name") or raw_tag.get("label")
+                tag_id = raw_tag.get("id")
+                if tag_name:
+                    resolved_names.append(tag_name)
+                elif tag_id and tag_map.get(tag_id):
+                    resolved_names.append(tag_map[tag_id])
+
+        nested_time_entry = entry.get("timeEntry") or entry.get("time_entry") or {}
+        nested_tag_ids = nested_time_entry.get("tagIds") or nested_time_entry.get("tag_ids") or []
+        for tag_id in nested_tag_ids:
+            if isinstance(tag_id, str) and tag_map.get(tag_id):
+                resolved_names.append(tag_map[tag_id])
+
+        unique_names: list[str] = []
+        for name in resolved_names:
+            if name and name not in unique_names:
+                unique_names.append(name)
+        return unique_names
 
     @staticmethod
     def _parse_datetime(value: str) -> datetime:

@@ -49,6 +49,9 @@ def generate_time_audit(
     """
     # Read CSV from string
     data_new = pd.read_csv(StringIO(csv_content))
+    if "Tags" not in data_new.columns:
+        data_new["Tags"] = ""
+    data_new["Tags"] = data_new["Tags"].fillna("")
 
     # Combine the date and time columns into datetime objects
     data_new["Start Datetime"] = pd.to_datetime(
@@ -133,6 +136,7 @@ def generate_time_audit(
         user = row["User"]
         date = row["Start Date"]
         description = row["Description"]
+        tags = [tag.strip() for tag in str(row.get("Tags", "")).split(",") if tag and tag.strip()]
         duration_decimal = row["Duration (decimal)"]
         duration_hm = convert_decimal_to_hm(duration_decimal)
         start_datetime = row["Start Datetime"]
@@ -146,6 +150,7 @@ def generate_time_audit(
         report_by_user_by_date[user][date].append(
             {
                 "description": description,
+                "tags": tags,
                 "duration": duration_decimal,
                 "duration_hm": duration_hm,
                 "start_time": start_datetime.strftime("%H:%M:%S"),
