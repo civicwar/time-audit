@@ -1,6 +1,6 @@
 ## Time Audit
 
-Python utilities to analyze Clockify detailed report exports.
+Python utilities to analyze Clockify detailed reports.
 
 ### Library Usage
 
@@ -57,7 +57,7 @@ generate_time_audit(
 ) -> dict
 ```
 
-This allows easy integration into a web endpoint that accepts an uploaded CSV and returns JSON.
+This allows easy integration into a web endpoint that accepts Clockify report data and returns JSON.
 
 ### Web App (Backend + Frontend)
 
@@ -65,8 +65,57 @@ Backend (FastAPI):
 
 ```bash
 poetry install
+poetry run alembic upgrade head
 poetry run uvicorn backend.main:app --reload
 ```
+
+The backend now initializes a local SQLite database automatically at `time_audit.db`.
+Create a local `.env` file first and set the admin seed password and Clockify API key there:
+
+```bash
+TIME_AUDIT_ADMIN_PASSWORD=change-this-admin-password
+TIME_AUDIT_CLOCKIFY_API_KEY=your-clockify-api-key
+```
+
+Set `TIME_AUDIT_DATABASE_URL` if you want to point it somewhere else, for example:
+
+```bash
+export TIME_AUDIT_DATABASE_URL=sqlite:///./time_audit.db
+poetry run alembic upgrade head
+poetry run uvicorn backend.main:app --reload
+```
+
+Alembic is configured for database migrations. Common commands:
+
+```bash
+poetry run alembic revision -m "create example table"
+poetry run alembic upgrade head
+```
+
+GitHub Actions:
+
+- `Deploy` builds the frontend, syncs code to the server, installs backend dependencies, runs migrations, and restarts the service.
+- `Create Admin` is a manual workflow that connects to the deployed server and creates or updates the `admin` user using the `ADMIN_WORKFLOW_PASSWORD` GitHub secret plus an optional `full_name` workflow input.
+
+Authentication is now enabled.
+Only the `admin` user is created during seeding, and its password is read from `.env` via `TIME_AUDIT_ADMIN_PASSWORD`.
+
+Clockify detailed reports are fetched directly from the Clockify API using `TIME_AUDIT_CLOCKIFY_API_KEY`.
+Optional overrides:
+- `TIME_AUDIT_CLOCKIFY_WORKSPACE_ID` to pin a specific workspace instead of auto-detecting the active one
+- `TIME_AUDIT_CLOCKIFY_API_BASE_URL` to override the standard API host
+- `TIME_AUDIT_CLOCKIFY_REPORTS_BASE_URL` to override the reports API host
+
+Login is protected against brute-force attempts with in-memory lockouts by client IP and username.
+Tunable environment variables:
+- `TIME_AUDIT_LOGIN_MAX_ATTEMPTS_PER_IP` default `10`
+- `TIME_AUDIT_LOGIN_MAX_ATTEMPTS_PER_USERNAME` default `5`
+- `TIME_AUDIT_LOGIN_ATTEMPT_WINDOW_SECONDS` default `900`
+- `TIME_AUDIT_LOGIN_LOCKOUT_SECONDS` default `900`
+
+Private backend endpoints live under `/api/in/...` and frontend private views live under `/in/...`.
+The public CSV upload-and-analyze flow is available at `/` and uses `/api/audit` without creating persisted sessions.
+Persisted sessions are listed only in the private workspace and are created from Clockify by admins.
 
 Frontend (Vue3 + Vuetify via Vite):
 
@@ -77,6 +126,14 @@ npm run dev
 ```
 
 The frontend dev server proxies API calls to `http://localhost:8000` and report JSON files are available at `/reports/<run_dir>/<user>_report.json`.
+
+In the private workspace, admins now select:
+- start date
+- end date
+- timezone
+
+The backend fetches the corresponding Clockify detailed report and stores the generated run as a persisted session.
+Admins can rename or delete persisted sessions from the private workspace.
 
 API response includes:
 ```
@@ -90,3 +147,10 @@ API response includes:
 }
 ```
 Use `relative_path` under `/reports/` to download.
+
+Current app status:
+- SQLite connection/session management is available in `backend.database`.
+- Alembic migration scaffolding is available under `alembic/`.
+- Authentication and user management are backed by the `users` table.
+- User roles are hardcoded to `Admin`, `Developer`, and `Reviewer`.
+- Clockify integration lives in the dedicated `backend.clockify` module.

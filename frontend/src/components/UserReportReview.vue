@@ -1,9 +1,7 @@
 <template>
   <v-card elevation="2" class="pa-4">
-    <div class="d-flex align-center justify-space-between mb-4">
-      <h2 class="text-h6">User Report Review</h2>
-      <v-btn color="primary" variant="text" href="#/">Back to Upload</v-btn>
-    </div>
+    <report-review-header
+    />
 
     <v-alert
       v-if="error"
@@ -22,21 +20,24 @@
 
     <div v-if="!loading && !error">
       <div class="d-flex flex-wrap align-center ga-3 mb-3">
-        <v-select
-          v-model="selectedUser"
-          :items="userOptions"
-          label="User"
+        <v-btn-toggle
+          v-model="viewMode"
+          color="primary"
           density="comfortable"
-          hide-details
-          style="max-width: 320px"
-        />
+          mandatory
+        >
+          <v-btn value="calendar">Calendar</v-btn>
+          <v-btn value="list">List</v-btn>
+        </v-btn-toggle>
         <v-switch
-          v-model="groupByDate"
+          v-if="viewMode === 'list'"
+          v-model="listGroupByDate"
           color="primary"
           hide-details
           label="Group by date"
         />
         <v-btn
+          v-if="showSelectedDownloadButton"
           color="primary"
           variant="outlined"
           :disabled="!canDownloadSelectedReport"
@@ -54,9 +55,82 @@
         </v-btn>
         <div class="text-body-2">Total Entries: {{ filteredRows.length }}</div>
       </div>
-      <v-expansion-panels v-if="groupByDate" multiple>
+
+      <calendar-legend
+      />
+
+      <div v-if="viewMode === 'calendar'">
+        <div v-if="calendarMode !== 'month'" class="d-flex flex-wrap align-center justify-end ga-2 mb-4">
+          <div class="text-body-2 text-medium-emphasis me-auto">{{ calendarPeriodLabel }}</div>
+          <v-btn icon="mdi-chevron-left" variant="text" :disabled="!canShiftCalendarPrevious" @click="shiftCalendarPeriod(-1)" />
+          <v-menu v-model="calendarPickerOpen" :close-on-content-click="false" location="bottom">
+            <template #activator="{ props: menuProps }">
+              <v-tooltip :text="`Go to ${calendarMode === 'week' ? 'week' : 'day'}`" location="top">
+                <template #activator="{ props: tooltipProps }">
+                  <v-btn v-bind="{ ...menuProps, ...tooltipProps }" icon="mdi-calendar-month" variant="text" />
+                </template>
+              </v-tooltip>
+            </template>
+            <v-card min-width="320">
+              <v-date-picker
+                :model-value="calendarPickerValue"
+                :min="calendarPickerMin"
+                :max="calendarPickerMax"
+                show-adjacent-months
+                @update:model-value="handleCalendarPickerUpdate"
+              />
+            </v-card>
+          </v-menu>
+          <v-tooltip v-if="showTodayShortcut" text="Today" location="top">
+            <template #activator="{ props: tooltipProps }">
+              <v-btn v-bind="tooltipProps" icon="mdi-calendar-today" variant="text" @click="jumpCalendarToToday" />
+            </template>
+          </v-tooltip>
+          <v-btn icon="mdi-chevron-right" variant="text" :disabled="!canShiftCalendarNext" @click="shiftCalendarPeriod(1)" />
+        </div>
+
+        <calendar-month-view
+          v-if="calendarMode === 'month'"
+        />
+
+        <calendar-week-view
+          v-else-if="calendarMode === 'week'"
+        />
+
+        <calendar-day-view v-else />
+
+        <div class="d-flex align-center justify-space-between mb-2">
+          <div class="text-body-2 text-medium-emphasis">
+            <template v-if="calendarMode === 'month'">Click a day to open its entries.</template>
+            <template v-else>Entries show their start and end times for the selected period.</template>
+          </div>
+          <div class="text-body-2 text-medium-emphasis">{{ filteredRows.length }} matching entries</div>
+        </div>
+      </div>
+
+      <v-data-table
+        v-else-if="!listGroupByDate"
+        :headers="headers"
+        :items="filteredRows"
+        density="comfortable"
+        item-value="id"
+        :sort-by="[{ key: 'date', order: 'asc' }, { key: 'user', order: 'asc' }]"
+      >
+        <template #item.description="{ item }">
+          <button
+            type="button"
+            class="task-description-button"
+            :title="item.description"
+            @click="openTaskDialog(item)"
+          >
+            {{ truncateDescription(item.description) }}
+          </button>
+        </template>
+      </v-data-table>
+
+      <v-expansion-panels v-else multiple>
         <v-expansion-panel
-          v-for="group in dateGroups"
+          v-for="group in listDateGroups"
           :key="group.date"
         >
           <v-expansion-panel-title>
@@ -68,26 +142,49 @@
               :items="group.items"
               density="comfortable"
               item-value="id"
-              :sort-by="[{ key: 'user', order: 'asc' }, { key: 'description', order: 'asc' }]"
-            />
+              :sort-by="[{ key: 'user', order: 'asc' }, { key: 'duration', order: 'desc' }]"
+            >
+              <template #item.description="{ item }">
+                <button
+                  type="button"
+                  class="task-description-button"
+                  :title="item.description"
+                  @click="openTaskDialog(item)"
+                >
+                  {{ truncateDescription(item.description) }}
+                </button>
+              </template>
+            </v-data-table>
           </v-expansion-panel-text>
         </v-expansion-panel>
       </v-expansion-panels>
-      <v-data-table
-        v-else
-        :headers="headers"
-        :items="filteredRows"
-        density="comfortable"
-        item-value="id"
-        :sort-by="[{ key: 'date', order: 'asc' }, { key: 'user', order: 'asc' }]"
-      />
     </div>
+
+    <task-details-dialog
+    />
+
+    <report-analysis-dialog
+    />
+
+    <day-entries-dialog
+    />
   </v-card>
 </template>
 
 <script setup>
-import { computed, onMounted, ref, watch } from 'vue'
-import axios from 'axios'
+import { computed, onUnmounted, ref, watch } from 'vue'
+import { storeToRefs } from 'pinia'
+
+import CalendarDayView from './user-report-review/CalendarDayView.vue'
+import CalendarLegend from './user-report-review/CalendarLegend.vue'
+import CalendarMonthView from './user-report-review/CalendarMonthView.vue'
+import CalendarWeekView from './user-report-review/CalendarWeekView.vue'
+import DayEntriesDialog from './user-report-review/DayEntriesDialog.vue'
+import ReportAnalysisDialog from './user-report-review/ReportAnalysisDialog.vue'
+import ReportReviewHeader from './user-report-review/ReportReviewHeader.vue'
+import TaskDetailsDialog from './user-report-review/TaskDetailsDialog.vue'
+import { groupedReportReviewHeaders, reportReviewHeaders } from '../data/reportReviewTableHeaders'
+import { useReportReviewStore } from '../stores/reportReview'
 
 const props = defineProps({
   reportPath: {
@@ -100,166 +197,81 @@ const props = defineProps({
   },
 })
 
-const loading = ref(false)
-const error = ref('')
-const rows = ref([])
-const reportFiles = ref([])
-const selectedUser = ref('All users')
-const groupByDate = ref(true)
+const store = useReportReviewStore()
+const calendarPickerOpen = ref(false)
 
-const headers = [
-  { title: 'User', key: 'user' },
-  { title: 'Date', key: 'date' },
-  { title: 'Task', key: 'description' },
-  { title: 'Duration (h)', key: 'duration' },
-  { title: 'Duration', key: 'duration_hm' },
-]
+const {
+  loading,
+  error,
+  viewMode,
+  calendarMode,
+  focusedDateKey,
+  listGroupByDate,
+  filteredRows,
+  showSelectedDownloadButton,
+  canDownloadSelectedReport,
+  downloadSelectedButtonText,
+  canDownloadAllReportsZip,
+  listDateGroups,
+  showTodayShortcut,
+  calendarPeriodLabel,
+  canShiftCalendarPrevious,
+  canShiftCalendarNext,
+  reportDateBounds,
+} = storeToRefs(store)
 
-const groupedHeaders = [
-  { title: 'User', key: 'user' },
-  { title: 'Task', key: 'description' },
-  { title: 'Duration (h)', key: 'duration' },
-  { title: 'Duration', key: 'duration_hm' },
-]
+const {
+  truncateDescription,
+  openTaskDialog,
+  shiftCalendarPeriod,
+  jumpCalendarToToday,
+  setFocusedCalendarDate,
+  downloadSelectedReport,
+  downloadAllReportsZip,
+  syncContext,
+  resetStore,
+} = store
 
-const runDir = computed(() => {
-  const [dir] = (props.reportPath || '').split('/')
-  return dir || ''
+const headers = reportReviewHeaders
+const groupedHeaders = groupedReportReviewHeaders
+const calendarPickerValue = computed({
+  get: () => focusedDateKey.value || null,
+  set: (value) => {
+    setFocusedCalendarDate(value)
+  },
 })
+const calendarPickerMin = computed(() => reportDateBounds.value?.start ? reportDateBounds.value.start.toISOString().slice(0, 10) : undefined)
+const calendarPickerMax = computed(() => reportDateBounds.value?.end ? reportDateBounds.value.end.toISOString().slice(0, 10) : undefined)
 
-const userOptions = computed(() => {
-  const users = Array.from(new Set(rows.value.map((r) => r.user))).sort()
-  return ['All users', ...users]
-})
-
-const filteredRows = computed(() => {
-  if (selectedUser.value === 'All users') return rows.value
-  return rows.value.filter((r) => r.user === selectedUser.value)
-})
-
-const selectedReportFile = computed(() => {
-  if (selectedUser.value === 'All users') return null
-  return reportFiles.value.find((rf) => rf.user === selectedUser.value) || null
-})
-
-const canDownloadSelectedReport = computed(() => Boolean(selectedReportFile.value?.relative_path))
-
-const canDownloadAllReportsZip = computed(() => Boolean(runDir.value && reportFiles.value.length))
-
-const downloadSelectedButtonText = computed(() => {
-  if (selectedUser.value === 'All users') return 'Select a user to download report.json'
-  return `Download ${selectedUser.value} report.json`
-})
-
-const dateGroups = computed(() => {
-  const grouped = filteredRows.value.reduce((acc, row) => {
-    if (!acc[row.date]) acc[row.date] = []
-    acc[row.date].push(row)
-    return acc
-  }, {})
-
-  return Object.keys(grouped)
-    .sort((a, b) => String(a).localeCompare(String(b)))
-    .map((date) => ({
-      date,
-      items: grouped[date],
-    }))
-})
-
-const loadReport = async () => {
-  if (!runDir.value) {
-    error.value = 'Missing run directory.'
-    rows.value = []
-    return
-  }
-
-  loading.value = true
-  error.value = ''
-  rows.value = []
-  reportFiles.value = []
-  try {
-    const { data: runData } = await axios.get(`/api/reports/${runDir.value}`)
-    const files = runData?.report_files || []
-    reportFiles.value = files
-    if (!files.length) {
-      rows.value = []
-      return
-    }
-
-    const reportResponses = await Promise.all(
-      files.map(async (rf) => {
-        const response = await axios.get(`/reports/${rf.relative_path}`)
-        return { user: rf.user, report: response.data }
-      })
-    )
-
-    const flatRows = []
-    reportResponses.forEach(({ user, report }) => {
-      Object.entries(report || {}).forEach(([date, tasks]) => {
-        ;(tasks || []).forEach((task, index) => {
-          flatRows.push({
-            id: `${user}-${date}-${index}-${task.description}`,
-            user,
-            date,
-            description: task.description,
-            duration: task.duration,
-            duration_hm: task.duration_hm,
-          })
-        })
-      })
-    })
-
-    rows.value = flatRows
-    if (props.user && userOptions.value.includes(props.user)) {
-      selectedUser.value = props.user
-    } else {
-      selectedUser.value = 'All users'
-    }
-  } catch (e) {
-    error.value = e.response?.data?.detail || 'Could not load run reports.'
-  } finally {
-    loading.value = false
-  }
+const handleCalendarPickerUpdate = (value) => {
+  calendarPickerValue.value = Array.isArray(value) ? value[0] : value
+  calendarPickerOpen.value = false
 }
 
-const downloadSelectedReport = async () => {
-  if (!selectedReportFile.value) return
-  try {
-    const response = await axios.get(`/reports/${selectedReportFile.value.relative_path}`, {
-      responseType: 'blob',
-    })
-    const blobUrl = window.URL.createObjectURL(response.data)
-    const link = document.createElement('a')
-    link.href = blobUrl
-    link.download = `${selectedUser.value.replace(/\s+/g, '_').toLowerCase()}_report.json`
-    document.body.appendChild(link)
-    link.click()
-    document.body.removeChild(link)
-    window.URL.revokeObjectURL(blobUrl)
-  } catch (e) {
-    error.value = e.response?.data?.detail || 'Could not download selected report.'
-  }
-}
+watch(
+  () => [props.reportPath, props.user],
+  ([reportPath, user]) => {
+    syncContext(reportPath, user)
+  },
+  { immediate: true }
+)
 
-const downloadAllReportsZip = async () => {
-  if (!canDownloadAllReportsZip.value) return
-  try {
-    const response = await axios.get(`/api/reports/${runDir.value}/zip`, {
-      responseType: 'blob',
-    })
-    const blobUrl = window.URL.createObjectURL(response.data)
-    const link = document.createElement('a')
-    link.href = blobUrl
-    link.download = `${runDir.value}_reports.zip`
-    document.body.appendChild(link)
-    link.click()
-    document.body.removeChild(link)
-    window.URL.revokeObjectURL(blobUrl)
-  } catch (e) {
-    error.value = e.response?.data?.detail || 'Could not download reports zip.'
-  }
-}
+watch(filteredRows, () => {
+  store.syncFocusedDate()
+})
 
-onMounted(loadReport)
-watch(() => props.reportPath, loadReport)
+onUnmounted(() => {
+  resetStore()
+})
 </script>
+
+<style scoped>
+.task-description-button {
+  padding: 0;
+  border: 0;
+  background: transparent;
+  color: inherit;
+  cursor: pointer;
+  text-align: left;
+}
+</style>

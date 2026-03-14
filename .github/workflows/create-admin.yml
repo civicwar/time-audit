@@ -1,0 +1,58 @@
+name: Create Admin
+
+on:
+  workflow_dispatch:
+    inputs:
+      full_name:
+        description: Full name for the admin account
+        required: false
+        default: Administrator
+        type: string
+
+jobs:
+  create-admin:
+    runs-on: ubuntu-latest
+    env:
+      DEPLOY_HOST: ${{ secrets.DEPLOY_HOST }}
+      DEPLOY_USER: ${{ secrets.DEPLOY_USER }}
+      DEPLOY_PATH: /opt/time-audit
+      SSH_PRIVATE_KEY: ${{ secrets.DEPLOY_SSH_KEY }}
+      ADMIN_WORKFLOW_PASSWORD: ${{ secrets.ADMIN_WORKFLOW_PASSWORD }}
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Validate password secret
+        run: |
+          if [ -z "$ADMIN_WORKFLOW_PASSWORD" ]; then
+            echo "ADMIN_WORKFLOW_PASSWORD GitHub secret is required." >&2
+            exit 1
+          fi
+          echo "::add-mask::$ADMIN_WORKFLOW_PASSWORD"
+
+      - name: Add SSH key
+        run: |
+          install -m 600 -D /dev/null ~/.ssh/id_rsa
+          echo "$SSH_PRIVATE_KEY" > ~/.ssh/id_rsa
+          ssh-keyscan -H "$DEPLOY_HOST" >> ~/.ssh/known_hosts
+
+      - name: Upload admin helper
+        run: |
+          ssh ${DEPLOY_USER}@${DEPLOY_HOST} "mkdir -p ${DEPLOY_PATH}/scripts"
+          rsync -az scripts/upsert_admin.py ${DEPLOY_USER}@${DEPLOY_HOST}:${DEPLOY_PATH}/scripts/upsert_admin.py
+
+      - name: Create or update admin user
+        run: |
+          ADMIN_PASSWORD_B64=$(printf '%s' "$ADMIN_WORKFLOW_PASSWORD" | base64 -w0)
+          ADMIN_FULL_NAME_B64=$(printf '%s' '${{ github.event.inputs.full_name }}' | base64 -w0)
+          echo "::add-mask::$ADMIN_PASSWORD_B64"
+          ssh ${DEPLOY_USER}@${DEPLOY_HOST} <<EOF
+          set -e
+          cd ${DEPLOY_PATH}
+          export TIME_AUDIT_ADMIN_PASSWORD="\$(printf '%s' '$ADMIN_PASSWORD_B64' | base64 -d)"
+          ADMIN_FULL_NAME="\$(printf '%s' '$ADMIN_FULL_NAME_B64' | base64 -d)"
+          sudo -E /opt/time-audit/venv/bin/python -m pip install --upgrade pip
+          sudo -E /opt/time-audit/venv/bin/python -m pip install .
+          sudo -E /opt/time-audit/venv/bin/python -m alembic upgrade head
+          sudo -E PYTHONPATH=${DEPLOY_PATH} /opt/time-audit/venv/bin/python scripts/upsert_admin.py --full-name "$ADMIN_FULL_NAME"
+          EOF

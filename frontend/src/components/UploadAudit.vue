@@ -1,25 +1,52 @@
 <template>
   <v-card elevation="2" class="pa-4">
-    <v-form @submit.prevent="submit">
-      <v-file-input
-        label="Clockify Detailed CSV"
-        v-model="file"
-        accept=".csv"
-        prepend-icon="mdi-file-upload"
-        :disabled="loading"
-        required
-        :multiple="false"
-      />
-      <v-text-field
-        v-model.number="bigTaskHours"
-        type="number"
-        label="Big Task Threshold (hours)"
-        :disabled="loading"
-        min="0"
-        step="0.5"
-      />
-      <v-btn :loading="loading" type="submit" color="primary" class="mt-2" :disabled="!file">Upload & Analyze</v-btn>
-    </v-form>
+    <div class="d-flex align-center justify-space-between mb-4">
+      <div>
+        <h2 class="text-h6">Upload & Analyze</h2>
+        <div class="text-body-2 text-medium-emphasis">Upload a CSV export, run the audit publicly, and review the generated reports for this run.</div>
+      </div>
+    </div>
+
+    <v-card variant="outlined" class="pa-4 mb-4">
+      <div class="text-subtitle-1 mb-3">CSV Audit</div>
+
+      <v-form @submit.prevent="submit">
+        <v-row>
+          <v-col cols="12" md="8">
+            <v-file-input
+              v-model="selectedFile"
+              accept=".csv,text/csv"
+              label="Clockify CSV Export"
+              :disabled="loading"
+              prepend-icon="mdi-file-delimited"
+              required
+              show-size
+            />
+          </v-col>
+
+          <v-col cols="12" md="4">
+            <v-text-field
+              v-model.number="bigTaskHours"
+              type="number"
+              label="Big Task Threshold (hours)"
+              :disabled="loading"
+              min="0"
+              step="0.5"
+            />
+          </v-col>
+        </v-row>
+
+        <v-btn
+          :loading="loading"
+          type="submit"
+          color="primary"
+          class="mt-2"
+          :disabled="!canSubmit"
+        >
+          Upload & Analyze
+        </v-btn>
+      </v-form>
+    </v-card>
 
     <v-divider class="my-4" />
 
@@ -53,21 +80,11 @@
             <pre>{{ results.big_tasks_per_user }}</pre>
           </v-expansion-panel-text>
         </v-expansion-panel>
-        <v-expansion-panel>
-          <v-expansion-panel-title>Report By User By Date</v-expansion-panel-title>
-          <v-expansion-panel-text>
-            <pre>{{ results.report_by_user_by_date }}</pre>
-          </v-expansion-panel-text>
-        </v-expansion-panel>
       </v-expansion-panels>
 
       <v-divider class="my-4" />
       <h3 class="text-h6 mb-2">Review Entry Reports (this run)</h3>
-      <v-btn
-        v-if="entryReportsLink"
-        color="primary"
-        :href="entryReportsLink"
-      >
+      <v-btn v-if="entryReportsLink" color="primary" :href="entryReportsLink">
         See Entry Reports
       </v-btn>
     </div>
@@ -76,44 +93,45 @@
 
 <script setup>
 import { computed, ref } from 'vue'
-import axios from 'axios'
 
-const file = ref(null)
+import api from '../services/api'
+
 const results = ref(null)
 const error = ref('')
 const loading = ref(false)
 const bigTaskHours = ref(8.0)
+const selectedFile = ref([])
 
 const entryReportsLink = computed(() => {
   const files = results.value?.report_files || []
   if (!files.length) return ''
   const [runDir] = String(files[0].relative_path || '').split('/')
   if (!runDir) return ''
-  return `#/reports/${encodeURIComponent(runDir)}/reviews`
+  return `/reports/${encodeURIComponent(runDir)}/reviews`
 })
 
+const selectedCsvFile = computed(() => {
+  const value = selectedFile.value
+  return Array.isArray(value) ? value[0] || null : value || null
+})
+
+const canSubmit = computed(() => Boolean(selectedCsvFile.value))
+
 const submit = async () => {
-  if (!file.value) return
-  // Vuetify v-file-input may provide a File or an array of File
-  const chosen = Array.isArray(file.value) ? file.value[0] : file.value
-  if (!chosen) return
+  if (!canSubmit.value) return
   loading.value = true
   error.value = ''
   results.value = null
   try {
-    const formData = new FormData()
-    formData.append('file', chosen)
-    formData.append('big_task_hours', bigTaskHours.value)
-    const { data } = await axios.post('/api/audit', formData, {
-      headers: { 'Content-Type': 'multipart/form-data' }
-    })
+    const payload = new FormData()
+    payload.append('file', selectedCsvFile.value)
+    payload.append('big_task_hours', String(bigTaskHours.value))
+    const { data } = await api.post('/api/audit', payload)
     results.value = data
-  } catch (e) {
-    error.value = e.response?.data?.detail || e.message
+  } catch (requestError) {
+    error.value = requestError.response?.data?.detail || requestError.message
   } finally {
     loading.value = false
   }
 }
-
-// Deprecated: dynamic reportLink replaced by server-provided filenames with timestamps
 </script>

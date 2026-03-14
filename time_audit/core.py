@@ -18,6 +18,7 @@ def generate_time_audit(
     csv_content: str,
     big_task_hours: float = 8.0,
     output_dir: Optional[str] = None,
+    run_dir_name: Optional[str] = None,
     write_reports: bool = True,
     clean_output_dir: bool = False,  # deprecated: retained for compatibility, ignored in favor of per-request subdirs
     retention_hours: int = 24,
@@ -29,6 +30,7 @@ def generate_time_audit(
     csv_content: Raw CSV string exported from Clockify detailed report (with the same columns expected previously).
     big_task_hours: Threshold above which a task is considered very big.
     output_dir: Directory to write per-user JSON reports. Used only if write_reports is True.
+    run_dir_name: Optional explicit run directory name to reuse when writing reports.
     write_reports: Whether to write JSON report files. If False, function only returns structures.
     clean_output_dir: (Deprecated) Ignored; previous behavior replaced with per-request subdirectories for isolation.
     retention_hours: Number of hours to retain past run directories. Directories older than this will be deleted.
@@ -47,6 +49,9 @@ def generate_time_audit(
     """
     # Read CSV from string
     data_new = pd.read_csv(StringIO(csv_content))
+    if "Tags" not in data_new.columns:
+        data_new["Tags"] = ""
+    data_new["Tags"] = data_new["Tags"].fillna("")
 
     # Combine the date and time columns into datetime objects
     data_new["Start Datetime"] = pd.to_datetime(
@@ -125,19 +130,17 @@ def generate_time_audit(
         .to_dict()["Duration (decimal)"]
     )
 
-    grouping_by_user_by_date = (
-        data_new.groupby(["User", "Start Date", "Description"])
-        .agg({"Duration (decimal)": "sum"})
-        .reset_index()
-    )
-
     report_by_user_by_date = {}
-    for _, row in grouping_by_user_by_date.iterrows():
+    report_rows = data_new.sort_values(["User", "Start Datetime", "End Datetime", "Description"])
+    for _, row in report_rows.iterrows():
         user = row["User"]
         date = row["Start Date"]
         description = row["Description"]
+        tags = [tag.strip() for tag in str(row.get("Tags", "")).split(",") if tag and tag.strip()]
         duration_decimal = row["Duration (decimal)"]
         duration_hm = convert_decimal_to_hm(duration_decimal)
+        start_datetime = row["Start Datetime"]
+        end_datetime = row["End Datetime"]
 
         if user not in report_by_user_by_date:
             report_by_user_by_date[user] = {}
@@ -147,13 +150,18 @@ def generate_time_audit(
         report_by_user_by_date[user][date].append(
             {
                 "description": description,
+                "tags": tags,
                 "duration": duration_decimal,
                 "duration_hm": duration_hm,
+                "start_time": start_datetime.strftime("%H:%M:%S"),
+                "end_time": end_datetime.strftime("%H:%M:%S"),
+                "start_datetime": start_datetime.strftime("%Y-%m-%d %H:%M:%S"),
+                "end_datetime": end_datetime.strftime("%Y-%m-%d %H:%M:%S"),
+                "end_date": row["End Date"],
             }
         )
 
     report_files: List[Dict[str, str]] = []
-    run_dir_name: Optional[str] = None
     if write_reports:
         if output_dir is None:
             output_dir = "output"
@@ -176,10 +184,13 @@ def generate_time_audit(
                     except OSError:
                         pass
 
-        # Create per-request subdirectory
-        ts = now.strftime("%Y%m%dT%H%M%SZ")
-        run_dir_name = f"{ts}_{uuid.uuid4().hex[:6]}"
+        # Create or reuse the per-request subdirectory.
+        if run_dir_name is None:
+            ts = now.strftime("%Y%m%dT%H%M%SZ")
+            run_dir_name = f"{ts}_{uuid.uuid4().hex[:6]}"
         run_dir_path = os.path.join(output_dir, run_dir_name)
+        if os.path.isdir(run_dir_path):
+            shutil.rmtree(run_dir_path)
         os.makedirs(run_dir_path, exist_ok=True)
 
         for user, data in report_by_user_by_date.items():
