@@ -6,7 +6,8 @@ output/
 *.db
 *.sqlite3
 
-*.pyc
+__pycache__/
+*.py[cod]
 node_modules/
 frontend/node_modules/
 frontend/dist/
