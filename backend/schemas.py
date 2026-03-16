@@ -60,3 +60,12 @@ class AuditSessionRead(BaseModel):
 
 class AuditSessionUpdate(BaseModel):
     name: Optional[str] = None
+
+
+class ApplicationLogRead(BaseModel):
+    available: bool = False
+    path: str
+    content: str = ""
+    line_count: int = 0
+    updated_at: Optional[datetime] = None
+    size_bytes: int = 0

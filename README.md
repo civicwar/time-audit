@@ -97,6 +97,15 @@ GitHub Actions:
 - `Deploy` builds the frontend, syncs code to the server, installs backend dependencies, runs migrations, and restarts the service.
 - `Create Admin` is a manual workflow that connects to the deployed server and creates or updates `.env` so it contains `TIME_AUDIT_ADMIN_PASSWORD`. The deploy workflow then uses that value when it runs migrations and seeds the admin.
 
+Application logs are written to `logs/time-audit.log` by default, with rotation enabled.
+Admins can inspect the latest log lines from the private UI at `/in/logs`.
+Optional log configuration environment variables:
+- `TIME_AUDIT_LOG_DIR`
+- `TIME_AUDIT_LOG_FILE`
+- `TIME_AUDIT_LOG_LEVEL`
+- `TIME_AUDIT_LOG_MAX_BYTES`
+- `TIME_AUDIT_LOG_BACKUP_COUNT`
+
 Authentication is now enabled.
 Only the `admin` user is created during seeding, and its password is read from `.env` via `TIME_AUDIT_ADMIN_PASSWORD`.
 

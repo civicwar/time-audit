@@ -1,4 +1,5 @@
 from contextlib import asynccontextmanager
+import logging
 import os
 
 from fastapi import FastAPI
@@ -9,13 +10,19 @@ from starlette.responses import Response
 from backend.auth import router as auth_router
 from backend.clockify import router as clockify_router
 from backend.database import DATABASE_URL, init_db
+from backend.logging_config import APP_LOG_FILE, configure_application_logging
 from backend.private import router as private_router
 from backend.public import router as public_router
+
+
+configure_application_logging()
+logger = logging.getLogger(__name__)
 
 
 @asynccontextmanager
 async def lifespan(_: FastAPI):
     init_db()
+    logger.info("Application startup complete. Log file: %s", APP_LOG_FILE)
     yield
 
 

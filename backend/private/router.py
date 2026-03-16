@@ -1,4 +1,6 @@
+from collections import deque
 from datetime import datetime, timezone
+from pathlib import Path
 
 from fastapi import APIRouter, Depends, HTTPException, Query, status
 from sqlalchemy import inspect, select
@@ -8,13 +10,25 @@ from backend.auth import get_current_user, require_roles
 from backend.clockify.client import ClockifyClientError, ClockifyConfigurationError
 from backend.clockify.service import execute_clockify_audit
 from backend.database import engine, get_db
+from backend.logging_config import APP_LOG_FILE
 from backend.models import AuditSession, Role, User
-from backend.schemas import AuditSessionRead, AuditSessionUpdate, UserCreate, UserRead, UserUpdate
+from backend.schemas import ApplicationLogRead, AuditSessionRead, AuditSessionUpdate, UserCreate, UserRead, UserUpdate
 from backend.public import OUTPUT_DIR, build_reports_zip_response, manifest_for_run, remove_run_directory
 from backend.security import get_password_hash
 
 
 router = APIRouter(prefix="/api/in", tags=["private"], dependencies=[Depends(get_current_user)])
+
+
+def _tail_log_file(path: Path, max_lines: int) -> tuple[str, int]:
+    collected_lines: deque[str] = deque(maxlen=max_lines)
+    with path.open("r", encoding="utf-8", errors="replace") as handle:
+        for line in handle:
+            collected_lines.append(line)
+    content = "".join(collected_lines)
+    return content, len(collected_lines)
+
+
 def _serialize_audit_session(session: AuditSession, report_files: list[dict]) -> AuditSessionRead:
     return AuditSessionRead(
         id=session.id,
@@ -41,6 +55,29 @@ def _sort_timestamp(value: datetime | None) -> datetime:
     if value.tzinfo is None:
         return value.replace(tzinfo=timezone.utc)
     return value.astimezone(timezone.utc)
+
+
+@router.get("/logs", response_model=ApplicationLogRead)
+async def read_application_logs(
+    lines: int = Query(200, ge=50, le=2000),
+    _: User = Depends(require_roles(Role.ADMIN)),
+):
+    if not APP_LOG_FILE.is_file():
+        return ApplicationLogRead(
+            available=False,
+            path=str(APP_LOG_FILE),
+        )
+
+    stat_result = APP_LOG_FILE.stat()
+    content, line_count = _tail_log_file(APP_LOG_FILE, lines)
+    return ApplicationLogRead(
+        available=True,
+        path=str(APP_LOG_FILE),
+        content=content,
+        line_count=line_count,
+        updated_at=datetime.fromtimestamp(stat_result.st_mtime, tz=timezone.utc),
+        size_bytes=stat_result.st_size,
+    )
 
 
 @router.get("/runs")

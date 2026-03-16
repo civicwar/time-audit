@@ -8,6 +8,7 @@
         <v-chip size="small" class="mr-3">{{ session.user.role }}</v-chip>
         <v-btn variant="text" href="/in">Sessions</v-btn>
         <v-btn v-if="session.user.role === 'Admin'" variant="text" href="/in/users">Users</v-btn>
+        <v-btn v-if="session.user.role === 'Admin'" variant="text" href="/in/logs">Logs</v-btn>
         <v-btn variant="text" @click="logout">Logout</v-btn>
       </template>
       <v-btn v-else variant="text" href="/login">Login</v-btn>
@@ -31,6 +32,7 @@
           :report-path="route.reportPath"
           :user="route.user"
         />
+        <logs-view v-else-if="route.name === 'logs'" />
         <user-management v-else-if="route.name === 'users'" />
         <v-alert v-else type="error" variant="tonal" text="Page not found." />
       </v-container>
@@ -41,6 +43,7 @@
 <script setup>
 import { computed, onBeforeUnmount, onMounted, ref } from 'vue'
 import LoginView from './components/LoginView.vue'
+import LogsView from './components/LogsView.vue'
 import PublicReportReview from './components/PublicReportReview.vue'
 import SessionWorkspace from './components/SessionWorkspace.vue'
 import UploadAudit from './components/UploadAudit.vue'
@@ -132,6 +135,15 @@ const updateRouteFromLocation = () => {
   if (pathname === '/in/users') {
     route.value = {
       name: 'users',
+      reportPath: '',
+      user: '',
+    }
+    return
+  }
+
+  if (pathname === '/in/logs') {
+    route.value = {
+      name: 'logs',
       reportPath: '',
       user: '',
     }
