@@ -4,7 +4,6 @@ import os
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import FileResponse
-from fastapi.staticfiles import StaticFiles
 from starlette.responses import Response
 
 from backend.auth import router as auth_router
@@ -41,14 +40,37 @@ app.include_router(private_router)
 async def health():
     return {"status": "ok", "database_url": DATABASE_URL}
 
-# Mount frontend last to avoid overshadowing /api routes
+# Serve the built SPA for non-API routes, including direct deep links like /login.
 FRONTEND_DIST = os.path.abspath(os.path.join(os.path.dirname(__file__), "..", "frontend", "dist"))
-if os.path.isdir(FRONTEND_DIST):
-    app.mount("/", StaticFiles(directory=FRONTEND_DIST, html=True), name="frontend")
+FRONTEND_INDEX = os.path.join(FRONTEND_DIST, "index.html")
 
-    @app.get("/{full_path:path}")
+
+def _resolve_frontend_path(path: str) -> str | None:
+    if not path:
+        return None
+
+    normalized_path = os.path.abspath(os.path.join(FRONTEND_DIST, path))
+    if normalized_path == FRONTEND_DIST or normalized_path.startswith(f"{FRONTEND_DIST}{os.sep}"):
+        return normalized_path
+    return None
+
+
+if os.path.isdir(FRONTEND_DIST):
+    @app.get("/", include_in_schema=False)
+    async def frontend_index():  # pragma: no cover
+        if os.path.exists(FRONTEND_INDEX):
+            return FileResponse(FRONTEND_INDEX)
+        return Response(status_code=404)
+
+    @app.get("/{full_path:path}", include_in_schema=False)
     async def spa_fallback(full_path: str):  # pragma: no cover
-        index_path = os.path.join(FRONTEND_DIST, "index.html")
-        if os.path.exists(index_path):
-            return FileResponse(index_path)
+        if full_path.startswith("api/"):
+            return Response(status_code=404)
+
+        requested_path = _resolve_frontend_path(full_path)
+        if requested_path and os.path.isfile(requested_path):
+            return FileResponse(requested_path)
+
+        if os.path.exists(FRONTEND_INDEX):
+            return FileResponse(FRONTEND_INDEX)
         return Response(status_code=404)
